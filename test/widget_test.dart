@@ -28,6 +28,38 @@ void main() {
     },
   );
 
+  testWidgets('a temporary focus loss does not restart camera setup', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        historyProvider.overrideWith((_) => Stream.value(const <SetRecord>[])),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const FormCheckApp(),
+      ),
+    );
+    final capture = container.read(cameraProvider);
+    await tester.tap(find.text('Open camera'));
+    final opening = capture.busy;
+    final error = capture.error;
+    var changes = 0;
+    capture.addListener(() => changes++);
+
+    tester.binding
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+
+    expect(changes, 0);
+    expect(capture.busy, opening);
+    expect(capture.error, error);
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('camera layout supports narrow screens with large text', (
     tester,
   ) async {

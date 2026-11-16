@@ -68,7 +68,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _foreground = state == AppLifecycleState.resumed;
+    // A system permission prompt temporarily takes focus from the visible app.
+    if (state == AppLifecycleState.inactive) return;
+    final foreground = state == AppLifecycleState.resumed;
+    if (_foreground == foreground) return;
+    _foreground = foreground;
     _syncCapture();
   }
 
