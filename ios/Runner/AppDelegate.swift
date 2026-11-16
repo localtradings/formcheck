@@ -7,6 +7,7 @@ import UIKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  private static let cloudModel = "gemini-3.8-flash"
   private let voice = AVSpeechSynthesizer()
   private var reviewInFlight = false
 
@@ -36,7 +37,7 @@ import UIKit
         }
         guard let self, let data = call.arguments as? [String: String],
               let prompt = data["prompt"], !prompt.isEmpty, prompt.count <= 4500,
-              data["cloudModel"] == "gemini-3.8-flash",
+              data["cloudModel"] == Self.cloudModel,
               FirebaseApp.app() != nil, !self.reviewInFlight else {
           result(Self.unavailable())
           return
@@ -89,8 +90,8 @@ import UIKit
       defer { reviewInFlight = false }
       do {
         let ai = FirebaseAI.firebaseAI(backend: .googleAI(), useLimitedUseAppCheckTokens: true)
-        let cloud = ai.geminiModel(modelName: "gemini-3.8-flash")
         if #available(iOS 26.0, *) {
+          let cloud = ai.geminiModel(name: Self.cloudModel)
           let session = ai.generativeModelSession(
             model: .hybridModel(primary: FirebaseAI.SystemLanguageModel.default, secondary: cloud)
           )
@@ -105,7 +106,8 @@ import UIKit
             result(Self.unavailable())
           }
         } else {
-          let response = try await cloud.generateContent(prompt)
+          let response = try await ai.generativeModel(modelName: Self.cloudModel)
+            .generateContent(prompt)
           if let text = response.text {
             result(["text": text, "source": "cloud"])
           } else {

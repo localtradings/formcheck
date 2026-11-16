@@ -48,9 +48,36 @@ Evidence here is source-level. Binary review of authorized APKs with REA and Ghi
 
 [Devpost challenge](https://firebasehybridaihackathon.devpost.com/) · [Official rules](https://firebasehybridaihackathon.devpost.com/rules)
 
+## Devpost draft
+
+FormCheck is a phone camera coach for bodyweight squats and push-ups. It counts completed reps, flags the form checks that need attention, and tells you when it needs a clearer view. A local history shows progress across comparable sets. Gym also offers a starter routine and manual logging.
+
+MediaPipe reads the camera on the phone. When you request a next-set review, Firebase AI Logic receives the rep totals and observed cue IDs so it can prioritize one correction. The Android coach tries Gemini Nano on eligible devices and can use Gemini in the cloud with your permission. The app displays where the response came from and can offer a built-in cue if generation is unavailable.
+
+For this entry the team built the Flutter workflow, rep and cue rules, local workout log, and hybrid coaching integration. The camera integration adapts Google's Apache-licensed Flutter MediaPipe example. See [source findings and provenance](#source-findings-and-provenance) for the upstream references.
+
+| Demo time | Show |
+| --- | --- |
+| 0:00–0:20 | Introduce the problem and set up the phone for a side view. |
+| 0:20–0:55 | Show a squat that passes, a shallow squat, and the reposition message during lost tracking. |
+| 0:55–1:25 | Show a push-up alignment cue and a completed push-up marked Couldn’t assess when an alignment landmark is obscured. Show the three counts. |
+| 1:25–2:10 | Request coaching, capture the actual on-device source label, retry and show the saved sets in Progress. |
+| 2:10–2:50 | Make a review on the older Android phone and capture the actual cloud source label. Briefly show Gym and the public source link. |
+
 ## Current evidence
 
-Planning and public-source review completed. Phone camera, model generation, signing, and judging access require verification. No physical Android device was attached at kickoff.
+The repository is public, its default branch is `main`, and GitHub detects the Apache-2.0 license. The Flutter app implements the camera, rep analysis, coaching, Gym and Progress flows. Release acceptance is recorded below.
+
+| Check | Evidence as of Nov 17, 2026 (Manila) |
+| --- | --- |
+| Dart analysis and automated tests | Local clean analysis and nine passing tests. Coverage includes noisy or interrupted reps, second-person rejection, push-up alignment, unassessed reps, idempotent local storage, progress, deletion, coach output validation and caching, permission dialog focus changes, and a 320 × 640 layout at 2× text. |
+| Android build without project credentials | GitHub Actions compiled a clean debug APK on Ubuntu using the locked SDK and dependencies. [Successful Android job](https://github.com/localtradings/formcheck/actions/runs/43928584189/job/133514586407) |
+| Android release build | Signed for ARM64. Package `com.localtradings.formcheck` targets API 36 with minimum API 28. The signing certificate matches the Firebase registration. Verified the bundled MediaPipe library and pinned pose-model digest. APK SHA-256 `d1e63684c4d1f3d2611bff340f307239f823c56b3dbfb46f04a7df689a366520`. |
+| Android emulator | Fresh install of the signed APK on Android 15 ARM64. While offline, a single permission denial showed a recovery message, explicit retry opened the camera, both virtual lenses opened with MediaPipe's CPU runtime, and a manual set survived a process restart. |
+| Firebase App Check | Enforcement is on. A live request to the judging project's Gemini Developer API route without an App Check token returned HTTP 401 and identified App Check as the reason. Successful device attestation and inference are pending. [Firebase AI Logic setup](https://firebase.google.com/docs/ai-logic/get-started) |
+| Android physical phones | Pending. Verify camera tracking and rule calibration, placement and mirroring, Play Integrity, Nano 4 and cloud results, offline fallback, and the five-minute performance targets on the two planned devices. |
+| iOS | Xcode 26.6 built the unsigned ARM64 simulator app with minimum iOS 15. Pinned Firebase SDK 12.19.2 compiles the hybrid session and the older-phone cloud path. iPhone signing, Apple Intelligence, cloud inference and external TestFlight acceptance are pending. [GitHub verification](https://github.com/localtradings/formcheck/actions) |
+| Judging and distribution | Pending. Requires verified signed hardware runs, accessible judge download, team demo recording, Devpost team roster and final submission. Include iOS only after its device and external TestFlight checks pass. |
 
 ### Implementation decisions made during the build
 
