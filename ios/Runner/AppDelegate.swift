@@ -7,7 +7,7 @@ import UIKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
-  private static let cloudModel = "gemini-3.8-flash"
+  private static let cloudModel = "gemini-3.5-flash-lite"
   private let voice = AVSpeechSynthesizer()
   private var reviewInFlight = false
 

@@ -47,7 +47,7 @@ class MainActivity : FlutterActivity() {
                 val prompt = call.argument<String>("prompt")
                 val model = call.argument<String>("cloudModel")
                 if (!firebaseReady || prompt.isNullOrBlank() || prompt.length > 4500 ||
-                    model != "gemini-3.8-flash" || reviewInFlight) {
+                    model != "gemini-3.5-flash-lite" || reviewInFlight) {
                     result.error("COACH_UNAVAILABLE", "The built-in cue is available.", null)
                     return@setMethodCallHandler
                 }

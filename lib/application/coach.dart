@@ -16,7 +16,7 @@ class SetCoach {
   final Future<CoachReply> Function(String) _generate;
   final Map<String, Future<CoachAdvice>> _active = {};
   static const _channel = MethodChannel('formcheck/coach');
-  static const _cloudModel = 'gemini-3.8-flash';
+  static const _cloudModel = 'gemini-3.5-flash-lite';
 
   Future<CoachAdvice> review(SetRecord record) {
     final existing = _active[record.id];
