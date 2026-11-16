@@ -22,8 +22,9 @@ class SetCoach {
     final existing = _active[record.id];
     if (existing != null) return existing;
     if (_active.isNotEmpty) return Future.value(builtIn(record));
-    final request = _review(record)
-        .whenComplete(() => _active.remove(record.id));
+    final request = _review(record).whenComplete(() {
+      _active.remove(record.id);
+    });
     _active[record.id] = request;
     return request;
   }

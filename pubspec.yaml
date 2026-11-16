@@ -33,7 +33,6 @@ flutter:
 
 hooks:
   user_defines:
-    material_ui: ^1.11.1
-  mediapipe_vision:
+    mediapipe_vision:
       tasks: [pose_landmarker]
       models: [pose_landmarker]

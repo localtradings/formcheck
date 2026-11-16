@@ -59,13 +59,19 @@ class _HomeState extends ConsumerState<_Home> {
     final page = IndexedStack(
       index: _tab,
       children: [
-        CameraPage(
-          active: _tab == 0,
-          exercise: _exercise,
-          onExercise: _openExercise,
+        TickerMode(
+          enabled: _tab == 0,
+          child: CameraPage(
+            active: _tab == 0,
+            exercise: _exercise,
+            onExercise: _openExercise,
+          ),
         ),
-        GymPage(onExercise: _openExercise),
-        const ProgressPage(),
+        TickerMode(
+          enabled: _tab == 1,
+          child: GymPage(onExercise: _openExercise),
+        ),
+        TickerMode(enabled: _tab == 2, child: const ProgressPage()),
       ],
     );
     return Scaffold(

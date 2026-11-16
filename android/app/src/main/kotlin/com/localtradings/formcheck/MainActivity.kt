@@ -8,10 +8,10 @@ import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.GenerativeBackend
-import com.google.firebase.ai.type.InferenceMode
-import com.google.firebase.ai.type.InferenceSource
-import com.google.firebase.ai.type.OnDeviceConfig
-import com.google.firebase.ai.type.OnDeviceModelOption
+import com.google.firebase.ai.InferenceMode
+import com.google.firebase.ai.InferenceSource
+import com.google.firebase.ai.OnDeviceConfig
+import com.google.firebase.ai.OnDeviceModelOption
 import com.google.firebase.ai.type.PublicPreviewAPI
 import com.google.firebase.appcheck.FirebaseAppCheck
 import io.flutter.embedding.android.FlutterActivity
