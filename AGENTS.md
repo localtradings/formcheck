@@ -24,7 +24,7 @@ Read [plan.md](plan.md) before scoping work. This is the public source repositor
 
 ## Visual ownership and workflow
 
-Claude Code owns appearance, UI, UX, motion and visual implementation. Apply the local `lance-ui-ux-motion` Finch and Catzy reference, preserve accessible equivalents, and verify against actual runtime. Codex owns coordination, architecture, nonvisual implementation, verification and image generation from Claude’s asset briefs. Use a focused native Claude conversation, preserve its exact session ID for handoffs, verify model and authentication, and use Opus 5.5 for major visual work and Sonnet 5.5 for focused revisions. Use the local `agent-toolkit` selectively. Choose one workflow at a time and keep required checks intact.
+Claude Code normally owns appearance, UI, UX, motion and visual implementation. The owner assigned the current FormCheck implementation to Codex/ChatGPT, including the UI. Apply the local `lance-ui-ux-motion` Finch and Catzy reference, preserve accessible equivalents, and verify against actual runtime. Codex owns coordination, architecture, nonvisual implementation, verification and image generation from Claude’s asset briefs. Use a focused native Claude conversation, preserve its exact session ID for handoffs, verify model and authentication, and use Opus 5.5 for major visual work and Sonnet 5.5 for focused revisions. Use the local `agent-toolkit` selectively. Choose one workflow at a time and keep required checks intact.
 
 ## Sources and tools
 

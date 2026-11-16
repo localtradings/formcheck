@@ -51,3 +51,11 @@ Evidence here is source-level. Binary review of authorized APKs with REA and Ghi
 ## Current evidence
 
 Planning and public-source review completed. Phone camera, model generation, signing, and judging access require verification. No physical Android device was attached at kickoff.
+
+### Implementation decisions made during the build
+
+- The application uses Flutter 3.50.0 and MediaPipe Vision 0.3.0. The model bundle is downloaded with the package's pinned digest. Android uses Firebase AI Logic 18.2.0 and the companion on-device SDK 16.0.0-beta08. iOS uses the Swift Package Manager release 12.19.2 because the later major release removed the `HybridModel` API used by the submission design.
+- The initial rep rules are deliberately provisional. The squat profile starts at 153° for standing, 128° for a completed movement candidate and 105° for depth. The push-up profile starts at 151°, 127°, and 100° respectively, with 155° for shoulder–hip–ankle alignment. Pixel-aspect correction is applied to the 2D measurements. Use consented clips on physical phones to calibrate these values before judging. A failed target corresponds to the measured check in the selected camera view.
+- The optional audio cues use installed system voices. Android selects only an installed English voice that requires no network. The cue and its form result remain visible in text.
+- The judging Firebase project has both mobile apps registered. The Android release certificate SHA-256 is registered, AI Logic App Check enforcement is enabled, and Play Integrity is configured for an APK distributed outside Google Play. Actual signed device attestation and model inference are distinct acceptance gates.
+- Reused source is limited to the camera frame conversion and camera geometry patterns from Google's Apache-2.0 [Flutter MediaPipe gallery](https://github.com/google/flutter-mediapipe/tree/672687c6ae517c1a8791677c88c9f73eaa94d575/gallery/lib/live). The [Firebase Android example](https://github.com/firebase/quickstart-android/tree/153d77572e27715fae8e94269debefb5c25507b8/firebase-ai) informed the native inference adapter. FormCheck's state machine, storage, UI, prompt contract and workout flow were built for this entry. No third-party workout footage or artwork is bundled.

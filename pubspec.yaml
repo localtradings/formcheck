@@ -1,0 +1,39 @@
+name: formcheck
+description: Camera-first workout coaching with Firebase AI Logic hybrid inference.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.14.0
+  flutter: '>=3.50.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  camera: ^0.12.0
+  drift: ^2.30.0
+  flutter_riverpod: ^3.0.0
+  material_ui: ^1.11.1
+  mediapipe_vision: 0.3.0
+  path: ^1.9.0
+  path_provider: ^2.1.5
+  uuid: ^4.5.0
+
+dev_dependencies:
+  build_runner: ^2.10.0
+  drift_dev: ^2.30.0
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/mediapipe/
+
+hooks:
+  user_defines:
+    material_ui: ^1.11.1
+  mediapipe_vision:
+      tasks: [pose_landmarker]
+      models: [pose_landmarker]
