@@ -10,7 +10,7 @@ Project code is licensed under [Apache-2.0](LICENSE). Third-party notices apply 
 
 ## Test the Android app
 
-[Download the signed FormCheck 0.1.1 APK](https://github.com/localtradings/formcheck/raw/refs/heads/main/downloads/FormCheck-0.1.1-android-arm64.apk) on an ARM64 phone running Android 9 or later. Open the downloaded APK to install it.
+[Download the signed FormCheck 0.1.1 APK](https://github.com/localtradings/formcheck/releases/download/v0.1.1/FormCheck-0.1.1-android-arm64.apk) on an ARM64 phone running Android 9 or later. Open the downloaded APK to install it.
 
 ## Build from source
 
