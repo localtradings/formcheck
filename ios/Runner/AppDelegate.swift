@@ -90,10 +90,11 @@ import UIKit
       defer { reviewInFlight = false }
       do {
         let ai = FirebaseAI.firebaseAI(backend: .googleAI(), useLimitedUseAppCheckTokens: true)
-        if #available(iOS 26.0, *) {
+        let systemModel = FirebaseAI.SystemLanguageModel.default
+        if #available(iOS 26.0, *), systemModel.isAvailable {
           let cloud = ai.geminiModel(name: Self.cloudModel)
           let session = ai.generativeModelSession(
-            model: .hybridModel(primary: FirebaseAI.SystemLanguageModel.default, secondary: cloud)
+            model: .hybridModel(primary: systemModel, secondary: cloud)
           )
           let response = try await session.respond(to: prompt)
           let version = response.rawResponse.modelVersion
