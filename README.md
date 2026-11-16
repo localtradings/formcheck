@@ -8,6 +8,10 @@ Android is the primary judging target. See [plan.md](plan.md) for the platform m
 
 Project code is licensed under [Apache-2.0](LICENSE). Third-party notices apply to any components identified in the repository.
 
+## Test the Android app
+
+[Download the signed FormCheck 0.1.1 APK](https://github.com/localtradings/formcheck/raw/refs/heads/main/downloads/FormCheck-0.1.1-android-arm64.apk) on an ARM64 phone running Android 9 or later. Open the downloaded APK to install it.
+
 ## Build from source
 
 1. Install Flutter **3.50.0** and use its bundled Dart. Android builds use the Android 36 SDK and the NDK version specified by Flutter, with JDK 21 recommended. iOS uses Xcode 26.2 or newer with Swift Package Manager. Simulator builds require Apple Silicon because the bundled MediaPipe runtime supplies an ARM64 simulator slice.
