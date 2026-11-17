@@ -10,9 +10,9 @@ Project code is licensed under [Apache-2.0](LICENSE). Third-party notices apply 
 
 ## Test the Android app
 
-[Download the signed FormCheck 0.1.2 APK](https://github.com/localtradings/formcheck/releases/download/v0.1.2/FormCheck-0.1.2-android-arm64.apk) on an ARM64 phone running Android 9 or later. Open the downloaded APK to install it. It updates the earlier signed build while preserving local history.
+[Download the signed FormCheck 0.1.3 APK](https://github.com/localtradings/formcheck/releases/download/v0.1.3/FormCheck-0.1.3-android-arm64.apk) on an ARM64 phone running Android 9 or later. Open the downloaded APK to install it. It updates the earlier signed build while preserving local history.
 
-Version 0.1.2 corrects camera and skeleton alignment by displaying the exact analyzed frame with one shared transform. See the [release notes and test steps](https://github.com/localtradings/formcheck/releases/tag/v0.1.2). Physical-phone alignment, performance and rule calibration remain device acceptance checks.
+Version 0.1.3 adds Google's Full pose model, the complete supported skeleton and display stabilization. Solid segments show confident observations; dashed segments show brief uncertainty. The camera image and skeleton still share the analyzed frame and transform. See the [release notes and test steps](https://github.com/localtradings/formcheck/releases/tag/v0.1.3). Physical-phone alignment, performance and rule calibration remain device acceptance checks.
 
 ## Build from source
 
