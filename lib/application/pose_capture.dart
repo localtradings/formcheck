@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -9,23 +10,7 @@ import 'package:mediapipe_vision/mediapipe_vision.dart';
 import '../domain/rep_analyzer.dart';
 import '../domain/workout.dart';
 import 'camera_frame.dart';
-
-const poseConnections = <(int, int)>[
-  (11, 12),
-  (11, 13),
-  (13, 15),
-  (12, 14),
-  (14, 16),
-  (11, 23),
-  (12, 24),
-  (23, 24),
-  (23, 25),
-  (25, 27),
-  (24, 26),
-  (26, 28),
-  (27, 31),
-  (28, 32),
-];
+import 'pose_frame.dart';
 
 final class PoseCapture extends ChangeNotifier {
   final _watch = Stopwatch()..start();
@@ -41,14 +26,14 @@ final class PoseCapture extends ChangeNotifier {
   int _generation = 0;
   int _lastSubmitted = -1000;
   int? _inFlight;
-  int _rotation = 0;
-  (int, int, int)? _frameGeometry;
+  VisionImage? _submittedImage;
+  PoseFrameGeometry? _submittedGeometry;
+  PoseFrameGeometry? _frameGeometry;
+  PoseFrame? _preview;
   int _measurementStarted = 0;
   int _measured = 0;
   final _displayLatency = <int>[];
   static const _measure = bool.fromEnvironment('FORMCHECK_TIMINGS');
-  double _aspect = 1;
-  bool _mirror = false;
   Timer? _watchdog;
   Timer? _cueTimer;
   bool _disposed = false;
@@ -57,7 +42,6 @@ final class PoseCapture extends ChangeNotifier {
   bool _needsSettings = false;
   bool _recording = false;
   bool _voiceEnabled = false;
-  List<Offset> _points = const [];
   final _reps = <RepResult>[];
   TrackingStatus _status = TrackingStatus.reposition;
   Cue? _cue;
@@ -73,17 +57,11 @@ final class PoseCapture extends ChangeNotifier {
       .containsAll([CameraLensDirection.front, CameraLensDirection.back]);
   bool get recording => _recording;
   bool get voiceEnabled => _voiceEnabled;
-  List<Offset> get points => _points;
+  PoseFrame? get previewFrame => _preview;
   List<RepResult> get reps => List.unmodifiable(_reps);
   TrackingStatus get status => _status;
   Cue? get cue => _cue;
-  double? get previewAspect {
-    final value = camera?.value;
-    if (value == null) return null;
-    return _isPortrait(value.deviceOrientation)
-        ? 1 / value.aspectRatio
-        : value.aspectRatio;
-  }
+  double? get previewAspect => _preview?.geometry.aspect ?? 2 / 3;
 
   Future<void> open(Exercise exercise) {
     final generation = ++_generation;
@@ -251,10 +229,12 @@ final class PoseCapture extends ChangeNotifier {
     _cueTimer?.cancel();
     _inFlight = null;
     _frameGeometry = null;
+    _submittedImage = null;
+    _submittedGeometry = null;
     _displayLatency.clear();
     _measured = 0;
     _measurementStarted = 0;
-    _points = const [];
+    _clearPreview();
     _status = TrackingStatus.reposition;
     _cue = null;
     _analyzer?.reset();
@@ -270,37 +250,32 @@ final class PoseCapture extends ChangeNotifier {
     unawaited(_serial(_release).catchError((Object _) {}));
   }
 
-  void _submit(
+  Future<void> _submit(
     int generation,
     CameraImage frame,
     CameraController camera,
     PoseLandmarker task,
-  ) {
+  ) async {
     if (!_current(generation)) return;
     final now = _watch.elapsedMilliseconds;
     if (_inFlight != null || now - _lastSubmitted < 50) return;
     try {
-      final orientation = camera.value.deviceOrientation;
-      final front =
-          camera.description.lensDirection == CameraLensDirection.front;
-      _rotation = _uprightRotation(
-        frame,
-        camera.description.sensorOrientation,
-        front,
-        orientation,
+      final geometry = PoseFrameGeometry.camera(
+        width: frame.width,
+        height: frame.height,
+        sensorOrientation: camera.description.sensorOrientation,
+        lens: camera.description.lensDirection,
+        orientation:
+            camera.value.previewPauseOrientation ??
+            camera.value.lockedCaptureOrientation ??
+            camera.value.deviceOrientation,
+        platform: defaultTargetPlatform,
       );
-      final geometry = (frame.width, frame.height, _rotation);
       if (_frameGeometry != null && _frameGeometry != geometry) {
         _analyzer?.reset();
-        _points = const [];
+        _clearPreview();
       }
       _frameGeometry = geometry;
-      final swapped = _rotation == 90 || _rotation == 270;
-      _aspect = swapped
-          ? frame.height / frame.width
-          : frame.width / frame.height;
-      // iOS flips the delivered front-camera frame and preview together.
-      _mirror = defaultTargetPlatform == TargetPlatform.android && front;
       _inFlight = now;
       _lastSubmitted = now;
       _watchdog?.cancel();
@@ -310,11 +285,16 @@ final class PoseCapture extends ChangeNotifier {
           'Pose tracking stopped responding. Reopen the camera.',
         );
       });
-      task.detectAsync(
-        visionImageFromCamera(frame),
-        timestampMilliseconds: now,
-        rotationDegrees: _rotation,
+      final image = await compute(preparePoseImage, (frame, geometry.rotation));
+      if (!_current(generation) || _inFlight != now) return;
+      _submittedImage = image;
+      _submittedGeometry = PoseFrameGeometry(
+        width: image.width!,
+        height: image.height!,
+        rotation: 0,
+        mirror: geometry.mirror,
       );
+      task.detectAsync(image, timestampMilliseconds: now, rotationDegrees: 0);
     } on Object {
       _fail(
         generation,
@@ -323,46 +303,83 @@ final class PoseCapture extends ChangeNotifier {
     }
   }
 
-  void _accept(int generation, PoseLandmarkerResult result) {
+  Future<void> _accept(int generation, PoseLandmarkerResult result) async {
     final timestamp = result.timestampMilliseconds;
-    if (!_current(generation) || timestamp == null || timestamp != _inFlight) {
+    final source = _submittedImage;
+    final geometry = _submittedGeometry;
+    if (!_current(generation) ||
+        timestamp == null ||
+        timestamp != _inFlight ||
+        source == null ||
+        geometry == null) {
       return;
     }
-    _watchdog?.cancel();
-    _inFlight = null;
-    final people = [
-      for (final landmarks in result.poseLandmarks)
-        [
-          for (final landmark in landmarks)
-            _upright(landmark.x, landmark.y, landmark.visibility ?? 0),
-        ],
-    ];
-    _points = people.length == 1
-        ? List.unmodifiable(
-            people.single.map(
-              (p) => p.visible
-                  ? Offset(_mirror ? 1 - p.x : p.x, p.y)
-                  : const Offset(-1, -1),
-            ),
-          )
-        : const [];
-    final outcome = _analyzer!.accept(PoseSample(timestamp, _aspect, people));
-    _status = outcome.status;
-    if (_recording && outcome.rep != null && _reps.length < 999) {
-      _reps.add(outcome.rep!);
+    try {
+      final image = await decodePoseFrame(source);
+      if (!_current(generation) || timestamp != _inFlight) {
+        image.dispose();
+        return;
+      }
+      _watchdog?.cancel();
+      _inFlight = null;
+      _submittedImage = null;
+      _submittedGeometry = null;
+      final people = [
+        for (final landmarks in result.poseLandmarks)
+          [
+            for (final landmark in landmarks)
+              Joint(
+                landmark.x,
+                landmark.y,
+                math.min(landmark.visibility ?? 0, landmark.presence ?? 1),
+              ),
+          ],
+      ];
+      final previous = _preview;
+      _preview = PoseFrame(image, geometry, people, timestamp);
+      final outcome = _analyzer!.accept(
+        PoseSample(timestamp, geometry.aspect, [
+          for (final person in people)
+            [for (final joint in person) geometry.upright(joint)],
+        ]),
+      );
+      _status = outcome.status;
+      if (_recording && outcome.rep != null && _reps.length < 999) {
+        _reps.add(outcome.rep!);
+      }
+      if (_recording && outcome.cue != null) {
+        _cue = outcome.cue;
+        _cueTimer?.cancel();
+        _cueTimer = Timer(const Duration(seconds: 3), () {
+          if (!_current(generation)) return;
+          _cue = null;
+          _changed();
+        });
+        if (_voiceEnabled) unawaited(_speak(outcome.cue!));
+      }
+      _changed();
+      _retirePreview(previous);
+      if (_measure) _measureDisplay(generation, timestamp);
+    } on Object {
+      _fail(
+        generation,
+        'The camera frame could not be displayed. Reopen the camera.',
+      );
     }
-    if (_recording && outcome.cue != null) {
-      _cue = outcome.cue;
-      _cueTimer?.cancel();
-      _cueTimer = Timer(const Duration(seconds: 3), () {
-        if (!_current(generation)) return;
-        _cue = null;
-        _changed();
-      });
-      if (_voiceEnabled) unawaited(_speak(outcome.cue!));
-    }
-    _changed();
-    if (_measure) _measureDisplay(generation, timestamp);
+  }
+
+  void _clearPreview() {
+    final previous = _preview;
+    _preview = null;
+    _retirePreview(previous);
+  }
+
+  void _retirePreview(PoseFrame? frame) {
+    if (frame == null) return;
+    SchedulerBinding.instance.addPostFrameCallback(
+      (_) => frame.image.dispose(),
+    );
+    SchedulerBinding.instance.scheduleFrame();
   }
 
   void _measureDisplay(int generation, int timestamp) {
@@ -401,40 +418,6 @@ final class PoseCapture extends ChangeNotifier {
     } on Exception {
       // Capture lifecycle is independent of speech.
     }
-  }
-
-  Joint _upright(double x, double y, double visibility) => switch (_rotation) {
-    90 => Joint(1 - y, x, visibility),
-    180 => Joint(1 - x, 1 - y, visibility),
-    270 => Joint(y, 1 - x, visibility),
-    _ => Joint(x, y, visibility),
-  };
-
-  static bool _isPortrait(DeviceOrientation orientation) =>
-      orientation == DeviceOrientation.portraitUp ||
-      orientation == DeviceOrientation.portraitDown;
-
-  // Adapted from the official Flutter MediaPipe sample camera_geometry.dart.
-  static int _uprightRotation(
-    CameraImage frame,
-    int sensor,
-    bool front,
-    DeviceOrientation orientation,
-  ) {
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      return _isPortrait(orientation) &&
-              frame.width > frame.height &&
-              (sensor == 90 || sensor == 270)
-          ? sensor
-          : 0;
-    }
-    final rotation = switch (orientation) {
-      DeviceOrientation.portraitUp => 0,
-      DeviceOrientation.landscapeLeft => 90,
-      DeviceOrientation.portraitDown => 180,
-      DeviceOrientation.landscapeRight => 270,
-    };
-    return (sensor + (front ? rotation : -rotation) + 360) % 360;
   }
 
   @override

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:camera/camera.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,6 +8,7 @@ import '../application/pose_capture.dart';
 import '../application/providers.dart';
 import '../domain/workout.dart';
 import 'theme.dart';
+import 'pose_preview.dart';
 
 class CameraPage extends ConsumerStatefulWidget {
   const CameraPage({
@@ -316,7 +316,10 @@ class _Stage extends StatelessWidget {
   Widget build(BuildContext context) {
     final camera = capture.camera;
     final status = switch (capture.status) {
-      TrackingStatus.reposition => 'Move into a clear side view',
+      TrackingStatus.reposition =>
+        exercise == Exercise.squat
+            ? 'Show your hips, knees and ankles from the side'
+            : 'Show your shoulders, hips and feet from the side',
       TrackingStatus.getReady =>
         exercise == Exercise.squat
             ? 'Stand tall to get ready'
@@ -349,12 +352,12 @@ class _Stage extends StatelessWidget {
                     child: Center(
                       child: AspectRatio(
                         aspectRatio: aspect,
-                        child: CameraPreview(
-                          camera,
-                          child: CustomPaint(
-                            painter: _Skeleton(capture.points),
+                        child: switch (capture.previewFrame) {
+                          final frame? => PosePreview(frame: frame),
+                          null => const Center(
+                            child: CircularProgressIndicator(),
                           ),
-                        ),
+                        },
                       ),
                     ),
                   );
@@ -418,31 +421,6 @@ class _Stage extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Skeleton extends CustomPainter {
-  const _Skeleton(this.points);
-  final List<Offset> points;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final limbs = Paint()
-      ..color = lime
-      ..strokeWidth = 2.5
-      ..strokeCap = StrokeCap.round;
-    bool visible(int index) => index < points.length && points[index].dx >= 0;
-    Offset at(int index) =>
-        Offset(points[index].dx * size.width, points[index].dy * size.height);
-    for (final (start, end) in poseConnections) {
-      if (!visible(start) || !visible(end)) continue;
-      canvas.drawLine(at(start), at(end), limbs);
-      canvas.drawCircle(at(end), 2.8, limbs);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _Skeleton oldDelegate) =>
-      oldDelegate.points != points;
 }
 
 class _Counts extends StatelessWidget {

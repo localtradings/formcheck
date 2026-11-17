@@ -91,3 +91,45 @@ Uint8List yuv420ToRgba({
   }
   return rgba;
 }
+
+/// Rotate owned pixel rows before inference so the model and preview consume
+/// the same upright image. Strip row padding and preserve channel order.
+VisionImage orientPoseImage(VisionImage image, int rotation) {
+  if (rotation == 0 &&
+      image.bytesPerRow == image.width! * image.format!.channels) {
+    return image;
+  }
+  if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) {
+    throw ArgumentError.value(rotation, 'rotation', 'Expected a quarter turn');
+  }
+  final width = image.width!;
+  final height = image.height!;
+  final channels = image.format!.channels;
+  final source = image.pixels!;
+  final outWidth = rotation == 0 || rotation == 180 ? width : height;
+  final outHeight = rotation == 0 || rotation == 180 ? height : width;
+  final pixels = Uint8List(outWidth * outHeight * channels);
+  for (var y = 0; y < height; y++) {
+    for (var x = 0; x < width; x++) {
+      final (dx, dy) = switch (rotation) {
+        0 => (x, y),
+        90 => (height - 1 - y, x),
+        180 => (width - 1 - x, height - 1 - y),
+        _ => (y, width - 1 - x),
+      };
+      final from = y * image.bytesPerRow! + x * channels;
+      final to = (dy * outWidth + dx) * channels;
+      pixels.setRange(to, to + channels, source, from);
+    }
+  }
+  return VisionImage.fromPixels(
+    pixels: pixels,
+    width: outWidth,
+    height: outHeight,
+    format: image.format!,
+  );
+}
+
+/// Runs on a worker isolate. Camera planes contain owned Dart byte buffers.
+VisionImage preparePoseImage((CameraImage, int) request) =>
+    orientPoseImage(visionImageFromCamera(request.$1), request.$2);
