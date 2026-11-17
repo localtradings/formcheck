@@ -11,8 +11,11 @@ import '../domain/rep_analyzer.dart';
 import '../domain/workout.dart';
 import 'camera_frame.dart';
 import 'pose_frame.dart';
+import 'pose_model.dart';
+import 'pose_overlay_filter.dart';
 
 final class PoseCapture extends ChangeNotifier {
+  final _overlay = PoseOverlayFilter();
   final _watch = Stopwatch()..start();
   final _device = const MethodChannel('formcheck/device');
   Future<void> _pending = Future.value();
@@ -106,7 +109,7 @@ final class PoseCapture extends ChangeNotifier {
         if (!_current(generation)) return;
         final landmarker = await PoseLandmarker.create(
           PoseLandmarkerOptions(
-            model: VisionModels.poseLandmarker,
+            model: formCheckPoseModel,
             runningMode: RunningMode.liveStream,
             delegate: Delegate.cpu,
             numPoses: 2,
@@ -225,6 +228,7 @@ final class PoseCapture extends ChangeNotifier {
   }
 
   void _resetView() {
+    _overlay.reset();
     _watchdog?.cancel();
     _cueTimer?.cancel();
     _inFlight = null;
@@ -273,6 +277,7 @@ final class PoseCapture extends ChangeNotifier {
       );
       if (_frameGeometry != null && _frameGeometry != geometry) {
         _analyzer?.reset();
+        _overlay.reset();
         _clearPreview();
       }
       _frameGeometry = geometry;
@@ -336,13 +341,15 @@ final class PoseCapture extends ChangeNotifier {
           ],
       ];
       final previous = _preview;
-      _preview = PoseFrame(image, geometry, people, timestamp);
-      final outcome = _analyzer!.accept(
-        PoseSample(timestamp, geometry.aspect, [
-          for (final person in people)
-            [for (final joint in person) geometry.upright(joint)],
-        ]),
+      final sample = PoseSample(timestamp, geometry.aspect, [
+        for (final person in people)
+          [for (final joint in person) geometry.upright(joint)],
+      ]);
+      final display = _overlay.accept(
+        PoseSample(timestamp, geometry.width / geometry.height, people),
       );
+      _preview = PoseFrame(image, geometry, display, timestamp);
+      final outcome = _analyzer!.accept(sample);
       _status = outcome.status;
       if (_recording && outcome.rep != null && _reps.length < 999) {
         _reps.add(outcome.rep!);

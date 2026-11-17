@@ -68,7 +68,7 @@ jobs:
       - name: Resolve dependencies and bundle the pose model
         run: |
           flutter pub get --enforce-lockfile
-          dart run mediapipe_core:bundle_models
+          dart run tool/prepare_pose_model.dart
       - name: Analyze and run automated tests
         if: matrix.platform == 'Android'
         run: |

@@ -22,8 +22,8 @@ typedef Analysis = ({TrackingStatus status, RepResult? rep, Cue? cue});
 
 final class FormProfile {
   const FormProfile._(this.id, this.top, this.motion, this.depth);
-  static const squat = FormProfile._('side-squat-v2', 153, 128, 105);
-  static const pushUp = FormProfile._('side-push-up-v2', 151, 127, 100);
+  static const squat = FormProfile._('side-squat-v3', 153, 128, 105);
+  static const pushUp = FormProfile._('side-push-up-v3', 151, 127, 100);
   static FormProfile forExercise(Exercise exercise) => switch (exercise) {
     Exercise.squat => squat,
     Exercise.pushUp => pushUp,

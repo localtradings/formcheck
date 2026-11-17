@@ -494,7 +494,7 @@ packages:
     source: hosted
     version: "1.11.1"
   mediapipe_core:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: mediapipe_core
       sha256: "09beee3a8b0f1b00224f5c368c70d9389473551a844f8057f23fcf6677c4f982"

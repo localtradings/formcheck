@@ -1,0 +1,18 @@
+FormCheck
+
+This application uses Google's MediaPipe Pose Landmarker Full float16 model,
+version 1, and MediaPipe runtime libraries.
+Copyright Google LLC and the MediaPipe Authors.
+Licensed under the Apache License, Version 2.0; see LICENSE.
+
+Model source:
+https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task
+SHA-256: 5134a3aad27a58b93da0088d431f366da362b44e3ccfbe3462b3827a839011b1
+Google model redistribution clarification:
+https://github.com/google-ai-edge/mediapipe/issues/6306
+
+Camera pixel conversion and camera geometry patterns were adapted from Google's
+Apache-2.0 flutter-mediapipe gallery. See plan.md for pinned source revisions,
+locations, and the adaptations made for FormCheck.
+
+Other dependency license notices are included by Flutter in the application.

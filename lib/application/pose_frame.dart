@@ -132,7 +132,8 @@ final class PoseFrameGeometry {
   int get hashCode => Object.hash(width, height, rotation, mirror);
 }
 
-/// Pixels and landmarks from one completed inference are published together.
+/// Pixels and display landmarks from one inference are published together.
+/// Display stabilization must not be used as input to the rep analyzer.
 final class PoseFrame {
   const PoseFrame(this.image, this.geometry, this.people, this.timestampMs);
   final ui.Image image;

@@ -17,7 +17,7 @@ Version 0.1.2 corrects camera and skeleton alignment by displaying the exact ana
 ## Build from source
 
 1. Install Flutter **3.50.0** and use its bundled Dart. Android builds use the Android 36 SDK and the NDK version specified by Flutter, with JDK 21 recommended. iOS uses Xcode 26.2 or newer with Swift Package Manager. Simulator builds require Apple Silicon because the bundled MediaPipe runtime supplies an ARM64 simulator slice.
-2. Run `flutter pub get` and `dart run mediapipe_core:bundle_models`. The MediaPipe tool downloads the pinned pose model and verifies its digest. The model is then bundled in the app for offline use.
+2. Run `flutter pub get` and `dart run tool/prepare_pose_model.dart`. The setup tool uses MediaPipe's verified model store to download Google's pinned Full pose model and check its SHA-256. The model is then bundled in the app for offline use.
 3. Run `flutter analyze` and `flutter test`.
 4. Run `flutter run` with a supported phone attached. The camera, workout history and built-in cues work with the downloaded model and without Firebase project credentials. Test camera framing and rep behavior on physical hardware.
 
