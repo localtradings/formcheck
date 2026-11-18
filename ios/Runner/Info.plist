@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>NSCameraUsageDescription</key>
 	<string>FormCheck uses the camera to count your reps and check exercise form on this device.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>FormCheck uses the phone’s motion sensor while the camera is open to show whether the lens is level.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'rep_analyzer.dart';
@@ -6,6 +7,7 @@ import 'workout.dart';
 enum FramingIssue {
   clear,
   searching,
+  intermittent,
   multiplePeople,
   tooClose,
   tooFar,
@@ -37,8 +39,23 @@ final class CameraFraming {
   int _nextAdjustmentAt = 0;
   bool _requestedWider = false;
   bool _needsWiderLens = false;
+  final _visibilityChanges = ListQueue<int>(4);
+  int? _lastPeople;
 
-  FramingIssue get issue => _issue;
+  FramingIssue get issue {
+    final now = _lastFrameAt;
+    if (now != null &&
+        (_lastPeople ?? 0) < 2 &&
+        _visibilityChanges.length == 4 &&
+        now - _visibilityChanges.last < 600 &&
+        (_issue == FramingIssue.clear ||
+            _issue == FramingIssue.searching ||
+            _issue == FramingIssue.multiplePeople)) {
+      return FramingIssue.intermittent;
+    }
+    return _issue;
+  }
+
   bool get needsWiderLens => _needsWiderLens;
 
   void reset() {
@@ -54,6 +71,8 @@ final class CameraFraming {
     _candidateAt = _adjustmentAt = now;
     _adjustment = _Adjustment.hold;
     _baseline = null;
+    _visibilityChanges.clear();
+    _lastPeople = null;
   }
 
   double? update(
@@ -77,6 +96,16 @@ final class CameraFraming {
     }
     _lastFrameAt = now;
     _aspect = sample.aspect;
+    final count = sample.people.length;
+    if (_lastPeople != null && (_lastPeople == 1) != (count == 1)) {
+      if (_visibilityChanges.length == 4) _visibilityChanges.removeFirst();
+      _visibilityChanges.addLast(now);
+    }
+    while (_visibilityChanges.isNotEmpty &&
+        now - _visibilityChanges.first > 1600) {
+      _visibilityChanges.removeFirst();
+    }
+    _lastPeople = count;
     final observed = _inspect(sample);
     if (_candidate != observed.issue) {
       _candidate = observed.issue;

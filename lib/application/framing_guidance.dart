@@ -13,6 +13,7 @@ String? framingPrompt(
     FramingIssue.searching when dim =>
       'The view is dark. Check the lens or turn on a light.',
     FramingIssue.searching => 'Step into view so the camera can see your body.',
+    FramingIssue.intermittent => 'Tracking keeps cutting out. Try better light and keep other people and reflections out of view.',
     FramingIssue.multiplePeople =>
       'Two people are in view. Keep only yourself in the frame.',
     FramingIssue.tooClose =>

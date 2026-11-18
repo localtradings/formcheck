@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/pose_capture.dart';
 import '../application/providers.dart';
+import '../domain/rep_analyzer.dart';
 import '../domain/workout.dart';
-import 'theme.dart';
+import 'camera_placement_guide.dart';
 import 'pose_preview.dart';
+import 'theme.dart';
 
 class CameraPage extends ConsumerStatefulWidget {
   const CameraPage({
@@ -32,6 +34,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   String _sessionId = newWorkoutId();
   String? _setId;
   bool _requested = false;
+  bool _guideExpanded = false;
   bool _foreground = true;
   List<RepResult>? _pendingReps;
   Exercise? _pendingExercise;
@@ -56,6 +59,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
         _pendingReps == null) {
       _review = null;
       _advice = null;
+      _guideExpanded = false;
       _sessionId = newWorkoutId();
     }
     if (widget.active != oldWidget.active ||
@@ -176,6 +180,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     listenable: _capture,
     builder: (context, _) {
       final record = _review;
+      final reps = _capture.reps;
       return PageBody(
         children: [
           Row(
@@ -188,7 +193,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
               const SizedBox(width: 10),
               Flexible(
                 child: Text(
-                  'FormCheck',
+                  MediaQuery.textScalerOf(context).scale(35) > 48
+                      ? 'Form\u200BCheck'
+                      : 'FormCheck',
+                  semanticsLabel: 'FormCheck',
                   style: Theme.of(context).textTheme.headlineLarge,
                 ),
               ),
@@ -242,34 +250,6 @@ class _CameraPageState extends ConsumerState<CameraPage>
             const SizedBox(height: 14),
             _Stage(capture: _capture, exercise: widget.exercise),
             const SizedBox(height: 10),
-            if (_capture.camera != null || _capture.recording)
-              _Counts(reps: _capture.reps),
-            if (_capture.camera != null)
-              Wrap(
-                spacing: 8,
-                children: [
-                  TextButton.icon(
-                    onPressed: _capture.canFlip && !_capture.busy
-                        ? _capture.flip
-                        : null,
-                    icon: const Icon(Icons.flip_camera_android_outlined),
-                    label: const Text('Flip camera'),
-                  ),
-                  TextButton.icon(
-                    onPressed: () =>
-                        _capture.setVoiceEnabled(!_capture.voiceEnabled),
-                    icon: Icon(
-                      _capture.voiceEnabled
-                          ? Icons.volume_up_outlined
-                          : Icons.volume_off_outlined,
-                    ),
-                    label: Text(
-                      _capture.voiceEnabled ? 'Voice on' : 'Voice off',
-                    ),
-                  ),
-                ],
-              ),
-            const SizedBox(height: 10),
             if (_capture.camera == null)
               RaisedAction(
                 label: _capture.busy ? 'Opening camera…' : 'Open camera',
@@ -300,6 +280,60 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 onPressed: _capture.openSettings,
                 child: const Text('Open camera settings'),
               ),
+            if (_capture.camera != null || _capture.recording)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: _Counts(reps: reps),
+              ),
+            if (_capture.recording && reps.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: RepCheckDetails(exercise: widget.exercise, reps: reps),
+              ),
+            if (_capture.camera != null)
+              Wrap(
+                spacing: 8,
+                children: [
+                  TextButton.icon(
+                    onPressed: () =>
+                        setState(() => _guideExpanded = !_guideExpanded),
+                    icon: Icon(
+                      _guideExpanded
+                          ? Icons.expand_less
+                          : Icons.explore_outlined,
+                    ),
+                    label: Text(
+                      _guideExpanded
+                          ? 'Hide camera guide'
+                          : 'Show camera guide',
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _capture.canFlip && !_capture.busy
+                        ? _capture.flip
+                        : null,
+                    icon: const Icon(Icons.flip_camera_android_outlined),
+                    label: const Text('Flip camera'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () =>
+                        _capture.setVoiceEnabled(!_capture.voiceEnabled),
+                    icon: Icon(
+                      _capture.voiceEnabled
+                          ? Icons.volume_up_outlined
+                          : Icons.volume_off_outlined,
+                    ),
+                    label: Text(
+                      _capture.voiceEnabled ? 'Voice on' : 'Voice off',
+                    ),
+                  ),
+                ],
+              ),
+            if (_guideExpanded && _capture.camera != null)
+              Panel(
+                padding: EdgeInsets.zero,
+                child: CameraPlacementGuide(exercise: widget.exercise),
+              ),
           ],
         ],
       );
@@ -329,9 +363,20 @@ class _Stage extends StatelessWidget {
       TrackingStatus.moving => 'Tracking this rep',
     };
     final aspect = capture.previewAspect;
+    final angle = capture.jointAngleDegrees;
+    final side = capture.measuredSide;
+    final measuredJoint = angle != null && angle.isFinite && side != null
+        ? (exercise: exercise, side: side)
+        : null;
     final cue = capture.cue;
+    final message =
+        capture.error ??
+        (capture.busy
+            ? capture.openingMessage
+            : capture.framingMessage ?? cue?.message ?? status);
     return Semantics(
       container: true,
+      explicitChildNodes: true,
       label: 'Camera form check',
       child: Container(
         clipBehavior: Clip.antiAlias,
@@ -346,14 +391,24 @@ class _Stage extends StatelessWidget {
             if (camera != null && aspect != null)
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final height = math.min(constraints.maxWidth / aspect, 420.0);
+                  final maxHeight = math.min(
+                    420.0,
+                    MediaQuery.sizeOf(context).height * .48,
+                  );
+                  final height = math.min(
+                    constraints.maxWidth / aspect,
+                    maxHeight,
+                  );
                   return SizedBox(
                     height: height,
                     child: Center(
                       child: AspectRatio(
                         aspectRatio: aspect,
                         child: switch (capture.previewFrame) {
-                          final frame? => PosePreview(frame: frame),
+                          final frame? => PosePreview(
+                            frame: frame,
+                            measuredJoint: measuredJoint,
+                          ),
                           null => const Center(
                             child: CircularProgressIndicator(),
                           ),
@@ -364,37 +419,7 @@ class _Stage extends StatelessWidget {
                 },
               )
             else
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 32,
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      exercise == Exercise.squat
-                          ? Icons.accessibility_new_rounded
-                          : Icons.fitness_center_rounded,
-                      size: 42,
-                      color: lime,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      exercise.label,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      exercise == Exercise.squat
-                          ? 'Set the phone at your side. Keep your shoulders, hips and feet visible.'
-                          : 'Set the phone low and at your side. Keep your shoulders, hands and feet visible.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: soft),
-                    ),
-                  ],
-                ),
-              ),
+              CameraPlacementGuide(exercise: exercise),
             if (camera != null || capture.error != null || capture.busy)
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -405,16 +430,23 @@ class _Stage extends StatelessWidget {
                 child: Semantics(
                   liveRegion: true,
                   child: Text(
-                    capture.error ??
-                        (capture.busy
-                            ? capture.openingMessage
-                            : capture.framingMessage ?? cue?.message ?? status),
+                    message,
                     style: TextStyle(
                       color: cue != null ? amber : null,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
+              ),
+            if (camera != null)
+              LiveCameraAngles(
+                exercise: exercise,
+                placementLabel: message == capture.placementLabel
+                    ? ''
+                    : capture.placementLabel,
+                sideAngle: capture.estimatedSideAngle,
+                lensTilt: capture.phoneTiltDegrees,
+                jointAngle: angle,
               ),
           ],
         ),
@@ -502,6 +534,17 @@ class _Review extends StatelessWidget {
       Text('${record.exercise.label} · ${record.total} reps'),
       const SizedBox(height: 14),
       _Counts(reps: record.reps),
+      if (record.reps.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        RepCheckDetails(
+          key: ValueKey(record.id),
+          exercise: record.exercise,
+          reps: record.reps,
+          review: true,
+          showTarget:
+              record.profile == FormProfile.forExercise(record.exercise).id,
+        ),
+      ],
       const SizedBox(height: 16),
       if (advice case final value?)
         Panel(
@@ -548,4 +591,124 @@ class _Review extends StatelessWidget {
       ),
     ],
   );
+}
+
+class RepCheckDetails extends StatefulWidget {
+  const RepCheckDetails({
+    super.key,
+    required this.exercise,
+    required this.reps,
+    this.review = false,
+    this.showTarget = true,
+  });
+
+  final Exercise exercise;
+  final List<RepResult> reps;
+  final bool review;
+  final bool showTarget;
+
+  @override
+  State<RepCheckDetails> createState() => _RepCheckDetailsState();
+}
+
+class _RepCheckDetailsState extends State<RepCheckDetails> {
+  int _fromLast = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final reps = widget.reps;
+    if (reps.isEmpty) return const SizedBox.shrink();
+    final index = (reps.length - 1 - _fromLast).clamp(0, reps.length - 1);
+    final result = reps[index];
+    final squat = widget.exercise == Exercise.squat;
+    final (label, icon, color) = switch (result.outcome) {
+      RepOutcome.passed => (
+        'Passed form checks',
+        Icons.check_circle_outline_rounded,
+        lime,
+      ),
+      RepOutcome.needsCorrection => (
+        'Needs correction',
+        Icons.adjust_rounded,
+        amber,
+      ),
+      RepOutcome.unassessed => (
+        'Couldn’t assess',
+        Icons.visibility_off_outlined,
+        soft,
+      ),
+    };
+    final explanation = switch ((result.outcome, result.cue)) {
+      (RepOutcome.passed, _) =>
+        squat ? 'You reached the squat depth check and returned to standing.' : 'You reached the elbow depth check and kept your shoulders, hips and ankles in line.',
+      (RepOutcome.needsCorrection, Cue.squatDepth) =>
+        'Your knee stayed more open than the squat depth target.',
+      (RepOutcome.needsCorrection, Cue.pushUpDepth) =>
+        'Your elbow stayed more open than the push-up depth target.',
+      (RepOutcome.needsCorrection, Cue.bodyLine) =>
+        'Your hips moved out of line with your shoulders and ankles.',
+      (RepOutcome.needsCorrection, _) =>
+        result.cue?.message ?? 'This rep missed a form check.',
+      (RepOutcome.unassessed, Cue.depthUnclear) =>
+        'The camera couldn’t confirm the depth at the bottom of this rep.',
+      (RepOutcome.unassessed, Cue.alignmentUnclear) => 'The camera couldn’t confirm your shoulder-to-ankle line through the rep.',
+      (RepOutcome.unassessed, _) =>
+        'The camera needed a clearer view to grade this rep.',
+    };
+    final joint = squat ? 'knee' : 'elbow';
+    final target = FormProfile.forExercise(widget.exercise).depth.round();
+    return Panel(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            liveRegion: !widget.review,
+            child: Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'Rep ${index + 1} · $label',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(explanation),
+          if (result.bottomAngleDegrees case final angle?) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Bottom $joint angle ≈$angle°${widget.showTarget ? ' · depth target $target°' : ''}',
+              style: const TextStyle(color: soft),
+            ),
+          ],
+          if (widget.review && reps.length > 1)
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                IconButton(
+                  tooltip: 'Previous rep',
+                  onPressed: index == 0
+                      ? null
+                      : () => setState(() => _fromLast++),
+                  icon: const Icon(Icons.chevron_left),
+                ),
+                Text('${index + 1} of ${reps.length}'),
+                IconButton(
+                  tooltip: 'Next rep',
+                  onPressed: index == reps.length - 1
+                      ? null
+                      : () => setState(() => _fromLast--),
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
 }

@@ -6,8 +6,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:mediapipe_vision/mediapipe_vision.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 import '../domain/camera_framing.dart';
+import '../domain/camera_placement.dart';
+import '../domain/exercise_assessment.dart';
+import '../domain/phone_level.dart';
 import '../domain/rep_analyzer.dart';
 import '../domain/workout.dart';
 import 'camera_frame.dart';
@@ -39,7 +43,10 @@ final class PoseCapture extends ChangeNotifier {
   int _lastSpokenAt = -6000;
   String _openingMessage = 'Starting camera…';
   List<CameraDescription> _available = [];
-  RepAnalyzer? _analyzer;
+  ExerciseAssessment? _assessment;
+  final _phone = PhoneLevelFilter();
+  StreamSubscription<AccelerometerEvent>? _motion;
+  PhoneLevel? _submittedLevel;
   Exercise? _exercise;
   int _generation = 0;
   int _lastSubmitted = -1000;
@@ -81,6 +88,13 @@ final class PoseCapture extends ChangeNotifier {
   List<RepResult> get reps => List.unmodifiable(_reps);
   TrackingStatus get status => _status;
   Cue? get cue => _cue;
+  double? get estimatedSideAngle =>
+      _assessment?.placement.estimatedDegrees?.toDouble();
+  double? get phoneTiltDegrees => _assessment?.level?.pitchDegrees;
+  double? get jointAngleDegrees => _assessment?.jointAngleDegrees;
+  int? get measuredSide => _assessment?.measuredSide;
+  String get placementLabel =>
+      _assessment?.adjustment ?? _assessment?.placementLabel ?? '';
   double? get previewAspect => _preview?.geometry.aspect ?? 2 / 3;
 
   String? get framingMessage {
@@ -94,11 +108,12 @@ final class PoseCapture extends ChangeNotifier {
       return null;
     }
     final since = _darkSince;
-    return framingPrompt(
+    final prompt = framingPrompt(
       framing.issue,
       exercise,
       dim: since != null && _preview!.timestampMs - since >= 600,
     );
+    return prompt ?? _assessment?.adjustment;
   }
 
   Future<void> open(Exercise exercise) {
@@ -118,7 +133,7 @@ final class PoseCapture extends ChangeNotifier {
       _reps.clear();
       _exercise = exercise;
     }
-    _analyzer = RepAnalyzer(exercise);
+    _assessment = ExerciseAssessment(exercise);
     _framing = CameraFraming(exercise);
     _fallbackLens = fallback;
     _wider = null;
@@ -177,6 +192,7 @@ final class PoseCapture extends ChangeNotifier {
           (result) => _accept(generation, result),
           onError: (Object _) => _recoverStream(generation),
         );
+        _watchLevel(generation);
         _watchdog.start(() => _recoverStream(generation));
         await camera.startImageStream(
           (frame) => _submit(generation, frame, camera, landmarker),
@@ -207,6 +223,36 @@ final class PoseCapture extends ChangeNotifier {
         }
       }
     });
+  }
+
+  void _watchLevel(int generation) {
+    // Camera placement can still be guided visually on sensorless devices.
+    final startedAt = _watch.elapsedMilliseconds;
+    void unavailable() {
+      if (_current(generation)) _phone.reset();
+    }
+
+    _motion =
+        accelerometerEventStream(
+          samplingPeriod: const Duration(milliseconds: 100),
+        ).listen(
+          (event) {
+            if (_current(generation)) {
+              // Native events have an epoch timestamp. Map it to the same
+              // monotonic clock as the frame and ignore delayed deliveries.
+              final age = DateTime.now()
+                  .difference(event.timestamp)
+                  .inMilliseconds;
+              if (age < -50 || age > 550) return;
+              final observedAt =
+                  _watch.elapsedMilliseconds - math.max<int>(0, age);
+              if (observedAt < startedAt) return;
+              _phone.add(observedAt, event.x, event.y, event.z);
+            }
+          },
+          onError: (Object _) => unavailable(),
+          onDone: unavailable,
+        );
   }
 
   Future<Map<String, double>> _viewWidths(CameraDescription lens) async {
@@ -317,12 +363,19 @@ final class PoseCapture extends ChangeNotifier {
     final camera = _camera;
     final task = _task;
     final results = _results;
+    final motion = _motion;
+    _motion = null;
     final zoom = _zoom;
     _zoom = null;
     _camera = null;
     _task = null;
     _results = null;
     try {
+      try {
+        await motion?.cancel();
+      } on Exception {
+        // Sensor teardown must not prevent releasing the camera.
+      }
       try {
         await zoom?.idle;
         if (camera != null && camera.value.isStreamingImages) {
@@ -350,6 +403,8 @@ final class PoseCapture extends ChangeNotifier {
     _frameGeometry = null;
     _submittedImage = null;
     _submittedGeometry = null;
+    _submittedLevel = null;
+    _phone.reset();
     _displayLatency.clear();
     _measured = 0;
     _measurementStarted = 0;
@@ -362,7 +417,7 @@ final class PoseCapture extends ChangeNotifier {
     _cueTimer?.cancel();
     _status = TrackingStatus.reposition;
     _cue = null;
-    _analyzer?.reset();
+    _assessment?.reset();
   }
 
   void _fail(int generation, String message) {
@@ -404,6 +459,7 @@ final class PoseCapture extends ChangeNotifier {
       }
       _frameGeometry = geometry;
       _inFlight = now;
+      _submittedLevel = _phone.at(now);
       _lastSubmitted = now;
       final image = await compute(preparePoseImage, (frame, geometry.rotation));
       if (!_current(generation) || _inFlight != now) return;
@@ -442,6 +498,8 @@ final class PoseCapture extends ChangeNotifier {
       _inFlight = null;
       _submittedImage = null;
       _submittedGeometry = null;
+      final level = _submittedLevel;
+      _submittedLevel = null;
       final people = [
         for (final landmarks in result.poseLandmarks)
           [
@@ -465,7 +523,19 @@ final class PoseCapture extends ChangeNotifier {
         _darkSince = people.isEmpty && isDarkCameraFrame(source)
             ? (_darkSince ?? timestamp)
             : null;
-        _track(generation, sample);
+        final world =
+            people.length == 1 && result.poseWorldLandmarks.length == 1
+            ? [
+                for (final joint in result.poseWorldLandmarks.single)
+                  WorldJoint(
+                    joint.x,
+                    joint.y,
+                    joint.z,
+                    math.min(joint.visibility ?? 1, joint.presence ?? 1),
+                  ),
+              ]
+            : const <WorldJoint>[];
+        _track(generation, sample, world, level);
       }
       if (!_current(generation)) return;
       _changed();
@@ -478,8 +548,13 @@ final class PoseCapture extends ChangeNotifier {
     }
   }
 
-  void _track(int generation, PoseSample sample) {
-    final outcome = _analyzer!.accept(sample);
+  void _track(
+    int generation,
+    PoseSample sample,
+    List<WorldJoint> world,
+    PhoneLevel? level,
+  ) {
+    final outcome = _assessment!.accept(sample, world, level);
     _status = outcome.status;
     if (_recording && outcome.rep != null && _reps.length < 999) {
       _reps.add(outcome.rep!);

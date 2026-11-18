@@ -43,6 +43,7 @@ class RepRows extends Table {
   IntColumn get position => integer()();
   TextColumn get outcome => textEnum<RepOutcome>()();
   TextColumn get cue => textEnum<Cue>().nullable()();
+  IntColumn get bottomAngleDegrees => integer().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {setId, position};
@@ -66,7 +67,7 @@ class WorkoutStore extends _$WorkoutStore {
   });
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -78,6 +79,9 @@ class WorkoutStore extends _$WorkoutStore {
       await customStatement(
         'CREATE INDEX sets_comparable ON workout_sets (exercise, profile, completed_at DESC)',
       );
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) await m.addColumn(repRows, repRows.bottomAngleDegrees);
     },
     beforeOpen: (_) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -128,7 +132,9 @@ class WorkoutStore extends _$WorkoutStore {
       final set = row.readTable(workoutSets);
       final group = records.putIfAbsent(set.id, () => (set, []));
       final rep = row.readTableOrNull(repRows);
-      if (rep != null) group.$2.add(RepResult(rep.outcome, rep.cue));
+      if (rep != null) {
+        group.$2.add(RepResult(rep.outcome, rep.cue, rep.bottomAngleDegrees));
+      }
     }
     return [
       for (final (set, reps) in records.values)
@@ -153,6 +159,12 @@ class WorkoutStore extends _$WorkoutStore {
   ) {
     if (!exercise.cameraSupported || reps.isEmpty || reps.length > 999) {
       throw ArgumentError('Invalid camera set');
+    }
+    for (final rep in reps) {
+      final angle = rep.bottomAngleDegrees;
+      if (angle != null && (angle < 0 || angle > 180)) {
+        throw ArgumentError.value(angle, 'bottomAngleDegrees');
+      }
     }
     return _save(
       SetRecord(
@@ -204,7 +216,9 @@ class WorkoutStore extends _$WorkoutStore {
             priorReps.length,
             (index) =>
                 priorReps[index].outcome == record.reps[index].outcome &&
-                priorReps[index].cue == record.reps[index].cue,
+                priorReps[index].cue == record.reps[index].cue &&
+                priorReps[index].bottomAngleDegrees ==
+                    record.reps[index].bottomAngleDegrees,
           ).every((match) => match)) {
         throw StateError('Set ID already used with different results.');
       }
@@ -240,6 +254,7 @@ class WorkoutStore extends _$WorkoutStore {
             position: index,
             outcome: rep.outcome,
             cue: Value(rep.cue),
+            bottomAngleDegrees: Value(rep.bottomAngleDegrees),
           ),
       ]),
     );

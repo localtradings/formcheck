@@ -10,11 +10,18 @@ Project code is licensed under [Apache-2.0](LICENSE). Third-party notices apply 
 
 ## Test the Android app
 
-[Download the signed FormCheck 0.1.4 APK](https://github.com/localtradings/formcheck/releases/download/v0.1.4/FormCheck-0.1.4-android-arm64.apk) on an ARM64 phone running Android 9 or later. Open it to update an earlier signed build and keep your workout history.
+Use an ARM64 phone running Android 9 or later. Open the APK to update an earlier signed FormCheck build and keep your workout history. [Download the signed FormCheck 0.1.5 APK](https://github.com/localtradings/formcheck/releases/download/v0.1.5/FormCheck-0.1.5-android-arm64.apk)
 
-Set the phone at your side. If you move too close or leave the frame, FormCheck tries to widen the camera view. If your camera has reached its limit, follow the on-screen direction to bring the missing joints into view. During setup it can zoom in on a small, centered person. During a tracked rep it keeps the view steady. Your completed reps stay in the set while the camera finds you again.
+Choose an exercise on the Camera tab to see two drawings showing where to put the phone and what its camera should see.
 
-For a quick check, finish one squat, step out halfway through the next one, then return and stand still. The first squat should stay counted. The interrupted one should add nothing. After the camera is ready, do another full squat. [Release notes and Android download](https://github.com/localtradings/formcheck/releases/tag/v0.1.4)
+| Exercise | Where to put the phone | What FormCheck checks |
+| --- | --- | --- |
+| Bodyweight squat | Beside you at standing hip height. Point the lens straight across, 90° to the direction you face. | Your hips move down and back up, your observed knee bends to the profile's target, and you return to standing. |
+| Floor push-up | Low beside the middle of your torso, 90° to the long edge of the mat. Leave room to see your hand and feet. | Your shoulders lower and return, the observed elbow reaches the depth target, and your shoulder, hip and ankle stay in line. |
+
+For either exercise, aim for 0° lens tilt. The live camera distinguishes the estimated side angle, the phone’s tilt and the bending joint’s angle. If a number is unavailable, follow the setup drawing. With a clear view, hold the start position and tap **Start set**. After the set, browse individual reps to see the measured bottom angle when available and the cue associated with that rep.
+
+For a quick check, finish one rep from the side. Move the phone to face you halfway through the next rep, then return it to your side. The completed rep should stay in the set. Wait for **Ready for the next rep** before trying again. Repeat with the other exercise. [Release notes and checksum](https://github.com/localtradings/formcheck/releases/tag/v0.1.5)
 
 ## Build from source
 

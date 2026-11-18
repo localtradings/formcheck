@@ -1,23 +1,33 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:mediapipe_vision/mediapipe_vision.dart';
 
 import '../application/pose_frame.dart';
 import '../application/pose_overlay_filter.dart';
+import '../domain/rep_analyzer.dart';
+import '../domain/workout.dart';
 import 'theme.dart';
+
+typedef MeasuredJoint = ({Exercise exercise, int side});
 
 /// The image and skeleton share a frame and a contain-fit transform.
 class PosePreview extends StatelessWidget {
-  const PosePreview({super.key, required this.frame});
+  const PosePreview({super.key, required this.frame, this.measuredJoint});
   final PoseFrame frame;
+  final MeasuredJoint? measuredJoint;
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(painter: PosePainter(frame), size: Size.infinite);
+  Widget build(BuildContext context) => CustomPaint(
+    painter: PosePainter(frame, measuredJoint: measuredJoint),
+    size: Size.infinite,
+  );
 }
 
 class PosePainter extends CustomPainter {
-  const PosePainter(this.frame);
+  const PosePainter(this.frame, {this.measuredJoint});
   final PoseFrame frame;
+  final MeasuredJoint? measuredJoint;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -56,8 +66,53 @@ class PosePainter extends CustomPainter {
             ..color = lime.withValues(alpha: point.visibility < .65 ? .7 : 1),
         );
       }
+      if (measuredJoint case final measured?) {
+        _highlightBend(canvas, size, joints, measured);
+      }
     }
     canvas.restore();
+  }
+
+  void _highlightBend(
+    Canvas canvas,
+    Size size,
+    List<Joint> joints,
+    MeasuredJoint measured,
+  ) {
+    if (!measured.exercise.cameraSupported ||
+        (measured.side != 0 && measured.side != 1)) {
+      return;
+    }
+    // MediaPipe's left and right landmarks alternate along each limb.
+    final first =
+        (measured.exercise == Exercise.squat ? 23 : 11) + measured.side;
+    if (first + 4 >= joints.length) return;
+    final upper = joints[first],
+        bend = joints[first + 2],
+        lower = joints[first + 4];
+    if (!upper.visible || !bend.visible || !lower.visible) return;
+    final center = frame.geometry.project(bend, size);
+    final a = frame.geometry.project(upper, size) - center;
+    final b = frame.geometry.project(lower, size) - center;
+    final radius = math.min(16.0, math.min(a.distance, b.distance) * .35);
+    if (radius < 5) return;
+    final sweep = math.atan2(
+      a.dx * b.dy - a.dy * b.dx,
+      a.dx * b.dx + a.dy * b.dy,
+    );
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final arc = Rect.fromCircle(center: center, radius: radius);
+    // A straight limb has no distinct inside. Keep the joint ring steady there.
+    final showArc = sweep.abs() < math.pi * .95;
+    for (final (color, width) in [(ink, 4.5), (amber, 2.0)]) {
+      paint
+        ..color = color
+        ..strokeWidth = width;
+      canvas.drawCircle(center, 4.6, paint);
+      if (showArc) canvas.drawArc(arc, a.direction, sweep, false, paint);
+    }
   }
 
   void _bone(Canvas canvas, Offset a, Offset b, bool uncertain) {
@@ -88,5 +143,5 @@ class PosePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant PosePainter oldDelegate) =>
-      oldDelegate.frame != frame;
+      oldDelegate.frame != frame || oldDelegate.measuredJoint != measuredJoint;
 }

@@ -905,8 +905,24 @@ class $RepRowsTable extends RepRows with TableInfo<$RepRowsTable, RepRow> {
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       ).withConverter<Cue?>($RepRowsTable.$convertercuen);
+  static const VerificationMeta _bottomAngleDegreesMeta =
+      const VerificationMeta('bottomAngleDegrees');
   @override
-  List<GeneratedColumn> get $columns => [setId, position, outcome, cue];
+  late final GeneratedColumn<int> bottomAngleDegrees = GeneratedColumn<int>(
+    'bottom_angle_degrees',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    setId,
+    position,
+    outcome,
+    cue,
+    bottomAngleDegrees,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -934,6 +950,15 @@ class $RepRowsTable extends RepRows with TableInfo<$RepRowsTable, RepRow> {
       );
     } else if (isInserting) {
       context.missing(_positionMeta);
+    }
+    if (data.containsKey('bottom_angle_degrees')) {
+      context.handle(
+        _bottomAngleDegreesMeta,
+        bottomAngleDegrees.isAcceptableOrUnknown(
+          data['bottom_angle_degrees']!,
+          _bottomAngleDegreesMeta,
+        ),
+      );
     }
     return context;
   }
@@ -964,6 +989,10 @@ class $RepRowsTable extends RepRows with TableInfo<$RepRowsTable, RepRow> {
           data['${effectivePrefix}cue'],
         ),
       ),
+      bottomAngleDegrees: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}bottom_angle_degrees'],
+      ),
     );
   }
 
@@ -985,11 +1014,13 @@ class RepRow extends DataClass implements Insertable<RepRow> {
   final int position;
   final RepOutcome outcome;
   final Cue? cue;
+  final int? bottomAngleDegrees;
   const RepRow({
     required this.setId,
     required this.position,
     required this.outcome,
     this.cue,
+    this.bottomAngleDegrees,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1004,6 +1035,9 @@ class RepRow extends DataClass implements Insertable<RepRow> {
     if (!nullToAbsent || cue != null) {
       map['cue'] = Variable<String>($RepRowsTable.$convertercuen.toSql(cue));
     }
+    if (!nullToAbsent || bottomAngleDegrees != null) {
+      map['bottom_angle_degrees'] = Variable<int>(bottomAngleDegrees);
+    }
     return map;
   }
 
@@ -1013,6 +1047,9 @@ class RepRow extends DataClass implements Insertable<RepRow> {
       position: Value(position),
       outcome: Value(outcome),
       cue: cue == null && nullToAbsent ? const Value.absent() : Value(cue),
+      bottomAngleDegrees: bottomAngleDegrees == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bottomAngleDegrees),
     );
   }
 
@@ -1030,6 +1067,7 @@ class RepRow extends DataClass implements Insertable<RepRow> {
       cue: $RepRowsTable.$convertercuen.fromJson(
         serializer.fromJson<String?>(json['cue']),
       ),
+      bottomAngleDegrees: serializer.fromJson<int?>(json['bottomAngleDegrees']),
     );
   }
   @override
@@ -1044,6 +1082,7 @@ class RepRow extends DataClass implements Insertable<RepRow> {
       'cue': serializer.toJson<String?>(
         $RepRowsTable.$convertercuen.toJson(cue),
       ),
+      'bottomAngleDegrees': serializer.toJson<int?>(bottomAngleDegrees),
     };
   }
 
@@ -1052,11 +1091,15 @@ class RepRow extends DataClass implements Insertable<RepRow> {
     int? position,
     RepOutcome? outcome,
     Value<Cue?> cue = const Value.absent(),
+    Value<int?> bottomAngleDegrees = const Value.absent(),
   }) => RepRow(
     setId: setId ?? this.setId,
     position: position ?? this.position,
     outcome: outcome ?? this.outcome,
     cue: cue.present ? cue.value : this.cue,
+    bottomAngleDegrees: bottomAngleDegrees.present
+        ? bottomAngleDegrees.value
+        : this.bottomAngleDegrees,
   );
   RepRow copyWithCompanion(RepRowsCompanion data) {
     return RepRow(
@@ -1064,6 +1107,9 @@ class RepRow extends DataClass implements Insertable<RepRow> {
       position: data.position.present ? data.position.value : this.position,
       outcome: data.outcome.present ? data.outcome.value : this.outcome,
       cue: data.cue.present ? data.cue.value : this.cue,
+      bottomAngleDegrees: data.bottomAngleDegrees.present
+          ? data.bottomAngleDegrees.value
+          : this.bottomAngleDegrees,
     );
   }
 
@@ -1073,13 +1119,15 @@ class RepRow extends DataClass implements Insertable<RepRow> {
           ..write('setId: $setId, ')
           ..write('position: $position, ')
           ..write('outcome: $outcome, ')
-          ..write('cue: $cue')
+          ..write('cue: $cue, ')
+          ..write('bottomAngleDegrees: $bottomAngleDegrees')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(setId, position, outcome, cue);
+  int get hashCode =>
+      Object.hash(setId, position, outcome, cue, bottomAngleDegrees);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1087,7 +1135,8 @@ class RepRow extends DataClass implements Insertable<RepRow> {
           other.setId == this.setId &&
           other.position == this.position &&
           other.outcome == this.outcome &&
-          other.cue == this.cue);
+          other.cue == this.cue &&
+          other.bottomAngleDegrees == this.bottomAngleDegrees);
 }
 
 class RepRowsCompanion extends UpdateCompanion<RepRow> {
@@ -1095,12 +1144,14 @@ class RepRowsCompanion extends UpdateCompanion<RepRow> {
   final Value<int> position;
   final Value<RepOutcome> outcome;
   final Value<Cue?> cue;
+  final Value<int?> bottomAngleDegrees;
   final Value<int> rowid;
   const RepRowsCompanion({
     this.setId = const Value.absent(),
     this.position = const Value.absent(),
     this.outcome = const Value.absent(),
     this.cue = const Value.absent(),
+    this.bottomAngleDegrees = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RepRowsCompanion.insert({
@@ -1108,6 +1159,7 @@ class RepRowsCompanion extends UpdateCompanion<RepRow> {
     required int position,
     required RepOutcome outcome,
     this.cue = const Value.absent(),
+    this.bottomAngleDegrees = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : setId = Value(setId),
        position = Value(position),
@@ -1117,6 +1169,7 @@ class RepRowsCompanion extends UpdateCompanion<RepRow> {
     Expression<int>? position,
     Expression<String>? outcome,
     Expression<String>? cue,
+    Expression<int>? bottomAngleDegrees,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1124,6 +1177,8 @@ class RepRowsCompanion extends UpdateCompanion<RepRow> {
       if (position != null) 'position': position,
       if (outcome != null) 'outcome': outcome,
       if (cue != null) 'cue': cue,
+      if (bottomAngleDegrees != null)
+        'bottom_angle_degrees': bottomAngleDegrees,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1133,6 +1188,7 @@ class RepRowsCompanion extends UpdateCompanion<RepRow> {
     Value<int>? position,
     Value<RepOutcome>? outcome,
     Value<Cue?>? cue,
+    Value<int?>? bottomAngleDegrees,
     Value<int>? rowid,
   }) {
     return RepRowsCompanion(
@@ -1140,6 +1196,7 @@ class RepRowsCompanion extends UpdateCompanion<RepRow> {
       position: position ?? this.position,
       outcome: outcome ?? this.outcome,
       cue: cue ?? this.cue,
+      bottomAngleDegrees: bottomAngleDegrees ?? this.bottomAngleDegrees,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1163,6 +1220,9 @@ class RepRowsCompanion extends UpdateCompanion<RepRow> {
         $RepRowsTable.$convertercuen.toSql(cue.value),
       );
     }
+    if (bottomAngleDegrees.present) {
+      map['bottom_angle_degrees'] = Variable<int>(bottomAngleDegrees.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1176,6 +1236,7 @@ class RepRowsCompanion extends UpdateCompanion<RepRow> {
           ..write('position: $position, ')
           ..write('outcome: $outcome, ')
           ..write('cue: $cue, ')
+          ..write('bottomAngleDegrees: $bottomAngleDegrees, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1970,6 +2031,7 @@ typedef $$RepRowsTableCreateCompanionBuilder = RepRowsCompanion Function({
   required int position,
   required RepOutcome outcome,
   Value<Cue?> cue,
+  Value<int?> bottomAngleDegrees,
   Value<int> rowid,
 });
 typedef $$RepRowsTableUpdateCompanionBuilder = RepRowsCompanion Function({
@@ -1977,6 +2039,7 @@ typedef $$RepRowsTableUpdateCompanionBuilder = RepRowsCompanion Function({
   Value<int> position,
   Value<RepOutcome> outcome,
   Value<Cue?> cue,
+  Value<int?> bottomAngleDegrees,
   Value<int> rowid,
 });
 
@@ -2028,6 +2091,11 @@ class $$RepRowsTableFilterComposer
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
 
+  ColumnFilters<int> get bottomAngleDegrees => $composableBuilder(
+    column: $table.bottomAngleDegrees,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$WorkoutSetsTableFilterComposer get setId {
     final $$WorkoutSetsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -2076,6 +2144,11 @@ class $$RepRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get bottomAngleDegrees => $composableBuilder(
+    column: $table.bottomAngleDegrees,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$WorkoutSetsTableOrderingComposer get setId {
     final $$WorkoutSetsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -2117,6 +2190,11 @@ class $$RepRowsTableAnnotationComposer
 
   GeneratedColumnWithTypeConverter<Cue?, String> get cue =>
       $composableBuilder(column: $table.cue, builder: (column) => column);
+
+  GeneratedColumn<int> get bottomAngleDegrees => $composableBuilder(
+    column: $table.bottomAngleDegrees,
+    builder: (column) => column,
+  );
 
   $$WorkoutSetsTableAnnotationComposer get setId {
     final $$WorkoutSetsTableAnnotationComposer composer = $composerBuilder(
@@ -2174,12 +2252,14 @@ class $$RepRowsTableTableManager
                 Value<int> position = const Value.absent(),
                 Value<RepOutcome> outcome = const Value.absent(),
                 Value<Cue?> cue = const Value.absent(),
+                Value<int?> bottomAngleDegrees = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RepRowsCompanion(
                 setId: setId,
                 position: position,
                 outcome: outcome,
                 cue: cue,
+                bottomAngleDegrees: bottomAngleDegrees,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2188,12 +2268,14 @@ class $$RepRowsTableTableManager
                 required int position,
                 required RepOutcome outcome,
                 Value<Cue?> cue = const Value.absent(),
+                Value<int?> bottomAngleDegrees = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RepRowsCompanion.insert(
                 setId: setId,
                 position: position,
                 outcome: outcome,
                 cue: cue,
+                bottomAngleDegrees: bottomAngleDegrees,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

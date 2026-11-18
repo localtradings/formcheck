@@ -17,7 +17,13 @@ enum Cue {
   pushUpDepth('Try to reach your push-up depth target.'),
   bodyLine('Keep your hips in line with your shoulders and ankles.'),
   repeat('Keep the same range on your next set.'),
-  reframe('Keep your whole body in the camera frame.');
+  reframe('Keep your whole body in the camera frame.'),
+  depthUnclear(
+    'Keep the bending joint in clear side view through the bottom of the rep.',
+  ),
+  alignmentUnclear(
+    'Keep one shoulder, hip and ankle in clear side view through the push-up.',
+  );
 
   const Cue(this.message);
   final String message;
@@ -26,9 +32,10 @@ enum Cue {
 enum TrackingStatus { reposition, getReady, ready, moving }
 
 final class RepResult {
-  const RepResult(this.outcome, [this.cue]);
+  const RepResult(this.outcome, [this.cue, this.bottomAngleDegrees]);
   final RepOutcome outcome;
   final Cue? cue;
+  final int? bottomAngleDegrees;
 }
 
 final class SetRecord {

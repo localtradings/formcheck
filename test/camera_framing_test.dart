@@ -61,6 +61,27 @@ final class _Camera {
 
 void main() {
   test(
+    'repeated losses give setup guidance that clears when the view settles',
+    () {
+      final camera = _Camera(Exercise.squat);
+      final one = [_squat()];
+      camera.show(one, frames: 6);
+      camera.show([]);
+      camera.show(one, frames: 2);
+      expect(camera.framing.issue, isNot(FramingIssue.intermittent));
+      camera.show([]);
+      camera.show(one);
+      expect(camera.framing.issue, FramingIssue.intermittent);
+      camera.show([_squat(), _squat()]);
+      expect(camera.framing.issue, FramingIssue.multiplePeople);
+      camera.show(one, frames: 8);
+      expect(camera.framing.issue, FramingIssue.clear);
+      camera.show([], frames: 15);
+      expect(camera.framing.issue, FramingIssue.searching);
+    },
+  );
+
+  test(
     'a protected rep cannot spend the wider-lens request needed after loss',
     () {
       final camera = _Camera(Exercise.squat, max: 1)
