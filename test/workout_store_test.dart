@@ -8,6 +8,45 @@ import 'package:formcheck/domain/workout.dart';
 
 void main() {
   test(
+    'new push-up checks keep older push-up history out of comparisons',
+    () async {
+      final store = WorkoutStore(NativeDatabase.memory());
+      addTearDown(store.close);
+      const olderReps = [RepResult(RepOutcome.passed, null, 89)];
+      await store.saveCamera(
+        'older',
+        'session-old',
+        Exercise.pushUp,
+        olderReps,
+      );
+      await store.customStatement(
+        'UPDATE workout_sets SET profile = ? WHERE id = ?',
+        ['side-push-up-v5', 'older'],
+      );
+      final current = await store.saveCamera(
+        'current',
+        'session-new',
+        Exercise.pushUp,
+        const [RepResult(RepOutcome.needsCorrection, Cue.bodyLine, 90)],
+      );
+      expect(current.profile, 'side-push-up-v6');
+      expect(await store.recentComparable(current), isEmpty);
+      final old = (await store.watch().first).singleWhere(
+        (set) => set.id == 'older',
+      );
+      expect(old.reps.single.bottomAngleDegrees, 89);
+      expect(old.passed, 1);
+      final squat = await store.saveCamera(
+        'squat',
+        'session-new',
+        Exercise.squat,
+        olderReps,
+      );
+      expect(squat.profile, 'side-squat-v5');
+    },
+  );
+
+  test(
     'camera saves are idempotent, persistent, and excluded from manual stats',
     () async {
       final tmp = await Directory.systemTemp.createTemp('formcheck-test-');

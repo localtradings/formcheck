@@ -104,8 +104,10 @@ final class PoseCapture extends ChangeNotifier {
     final framing = _framing;
     final exercise = _exercise;
     if (_preview == null || framing == null || exercise == null) return null;
-    if (_status == TrackingStatus.moving || _status == TrackingStatus.ready) {
-      return null;
+    if (_status == TrackingStatus.moving) return null;
+    final setup = _recording ? null : _assessment?.setupCue;
+    if (_status == TrackingStatus.ready) {
+      return setup == null ? null : 'Ready to start. ${setup.message}';
     }
     final since = _darkSince;
     final prompt = framingPrompt(
@@ -113,7 +115,7 @@ final class PoseCapture extends ChangeNotifier {
       exercise,
       dim: since != null && _preview!.timestampMs - since >= 600,
     );
-    return prompt ?? _assessment?.adjustment;
+    return prompt ?? _assessment?.adjustment ?? setup?.message;
   }
 
   Future<void> open(Exercise exercise) {
@@ -610,7 +612,8 @@ final class PoseCapture extends ChangeNotifier {
     if (prompt == null) {
       _spokenFraming = null;
     } else if (_voiceEnabled &&
-        _status == TrackingStatus.reposition &&
+        (_status == TrackingStatus.reposition ||
+            !_recording && _assessment?.setupCue != null) &&
         prompt != _spokenFraming &&
         sample.timestampMs - _lastSpokenAt >= 6000) {
       _lastSpokenAt = sample.timestampMs;

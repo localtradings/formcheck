@@ -15,6 +15,7 @@ final class ExerciseAssessment {
   PhoneLevel? level;
   double? get jointAngleDegrees => _reps.jointAngleDegrees;
   int? get measuredSide => _reps.measuredSide;
+  Cue? get setupCue => _reps.setupCue;
 
   String get placementLabel => switch (placement.view) {
     PlacementView.side => 'Side view looks good',

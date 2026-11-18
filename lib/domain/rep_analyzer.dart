@@ -26,18 +26,25 @@ final class PoseSample {
 }
 
 typedef Analysis = ({TrackingStatus status, RepResult? rep, Cue? cue});
+typedef _StartPose = ({
+  double bodyY,
+  Joint support,
+  double length,
+  double highestAngle,
+});
 typedef _SideView = ({
   int side,
   double angle,
   double confidence,
   double length,
   bool atTop,
+  double? plankLine,
 });
 
 final class FormProfile {
   const FormProfile._(this.id, this.top, this.motion, this.depth);
   static const squat = FormProfile._('side-squat-v5', 153, 128, 105);
-  static const pushUp = FormProfile._('side-push-up-v5', 151, 127, 100);
+  static const pushUp = FormProfile._('side-push-up-v6', 151, 127, 100);
   static const depthMarginDegrees = 4.0;
   static const bodyLineDegrees = 155.0;
   static const bodyLineMarginDegrees = 4.0;
@@ -70,15 +77,22 @@ final class RepAnalyzer {
   int? _lastTime;
   int? _side;
   ({Joint shoulder, Joint hip, Joint contact, double aspect})? _lastBody;
-  ({double bodyY, Joint support, double length, double highestAngle})?
-  _startPose;
+  _StartPose? _startPose;
+  ({int since, _StartPose pose})? _strongPlank;
   int? _topSince;
   int? _sideConflictSince;
   int? _startedAt;
   int? _returnSince;
+  int? _strongReturnSince;
   int? _invalidEndSince;
   double? _filteredAngle;
   final _depth = _DepthEvidence();
+  final _pushUpBend = _DepthEvidence();
+  bool _shortenedAtBottom = false;
+  int? _setupDriftSince;
+  int? _correctedSetupSince;
+  bool _startAlignmentFault = false;
+  Cue? _setupCue;
   double _maxDrop = 0;
   int _lineEvidenceMs = 0;
   int _lineDriftMs = 0;
@@ -92,6 +106,7 @@ final class RepAnalyzer {
 
   double? get jointAngleDegrees => _filteredAngle;
   int? get measuredSide => _side;
+  Cue? get setupCue => _setupCue;
 
   void reset() {
     _lastTime = null;
@@ -103,8 +118,11 @@ final class RepAnalyzer {
     _side = null;
     _lastBody = null;
     _startPose = null;
+    _strongPlank = null;
     _topSince = null;
     _sideConflictSince = null;
+    _setupDriftSince = null;
+    _setupCue = null;
     _filteredAngle = null;
     _armed = false;
     _clearMovement();
@@ -144,18 +162,53 @@ final class RepAnalyzer {
     final body = joints[first], support = joints[first + 4];
     final extended = filtered >= profile.top && view.angle >= profile.top;
     final atTop = extended && view.atTop;
+    final line = view.plankLine;
+    if (_startedAt == null &&
+        extended &&
+        joints[25 + side].visible &&
+        line != null &&
+        line <
+            FormProfile.bodyLineDegrees - FormProfile.bodyLineMarginDegrees) {
+      if (dt > _maxEvidenceGapMs) _setupDriftSince = null;
+      _setupDriftSince ??= now;
+      _setupCue = now - _setupDriftSince! >= 200 ? Cue.bodyLine : null;
+    } else {
+      _setupDriftSince = null;
+      _setupCue = null;
+    }
     if (!_armed) {
       if (atTop) {
         _topSince ??= now;
-        _armed = now - _topSince! >= readyMs;
+        final strongStart = _confirmedPlankStart(
+          view,
+          body,
+          support,
+          joints[25 + side],
+          now,
+          dt,
+          sample.aspect,
+        );
+        _armed = strongStart != null || now - _topSince! >= readyMs;
+        if (strongStart != null) _startPose = strongStart;
       } else {
         _topSince = null;
+        _strongPlank = null;
       }
       if (!_armed) {
         return (status: TrackingStatus.getReady, rep: null, cue: null);
       }
     }
+    if (!atTop) _correctedSetupSince = null;
     if (_startedAt == null && atTop) {
+      if (_setupCue == Cue.bodyLine) _startAlignmentFault = true;
+      if (line != null &&
+          line >=
+              FormProfile.bodyLineDegrees + FormProfile.bodyLineMarginDegrees) {
+        _correctedSetupSince ??= now;
+        if (now - _correctedSetupSince! >= 200) _startAlignmentFault = false;
+      } else {
+        _correctedSetupSince = null;
+      }
       final highest = _startPose?.highestAngle ?? view.angle;
       if (view.angle >= highest - 2) {
         _startPose = (
@@ -183,11 +236,22 @@ final class RepAnalyzer {
         return (status: TrackingStatus.getReady, rep: null, cue: null);
       }
       _startedAt = now;
+      _alignmentFault = _startAlignmentFault;
     }
     final elapsed = now - _startedAt!;
     if (elapsed > maxRepMs) return _lost();
     _maxDrop = math.max(_maxDrop, drop);
-    _depth.observe(now, dt, bent ? view.angle : null);
+    final pushUp = exercise == Exercise.pushUp;
+    final shortened = pushUp && view.length < .60 * start.length;
+    if (bent && shortened) _shortenedAtBottom = true;
+    _depth.observe(now, dt, bent && !shortened ? view.angle : null);
+    if (pushUp) {
+      _pushUpBend.observe(
+        now,
+        dt,
+        drop >= .15 && view.angle <= profile.motion + 10 ? view.angle : null,
+      );
+    }
     final nearStart =
         math.max(bodyDrop, relativeDrop) <= math.min(.13, .45 * _maxDrop);
     final missingLine =
@@ -199,6 +263,15 @@ final class RepAnalyzer {
         (view.atTop ||
             (missingLine && _hasSupportBelow(body, support, view.length)));
     _returnSince = atEnd ? _returnSince ?? now : null;
+    final strongEnd =
+        pushUp &&
+        atEnd &&
+        !missingLine &&
+        joints[25 + side].visible &&
+        view.angle >= profile.top + 12 &&
+        view.length >= start.length * .85 &&
+        math.max(bodyDrop, relativeDrop) <= .09;
+    _strongReturnSince = strongEnd ? _strongReturnSince ?? now : null;
     _invalidEndSince = extended && !atEnd ? _invalidEndSince ?? now : null;
     if (_invalidEndSince != null && now - _invalidEndSince! >= readyMs) {
       return _lost();
@@ -210,14 +283,24 @@ final class RepAnalyzer {
             sample.aspect,
             now,
             elapsed == 0 ? 0 : dt,
-            extended,
           )
         : null;
-    if (_returnSince == null || now - _returnSince! < completionHoldMs) {
+    final confirmedReturn =
+        _returnSince != null && now - _returnSince! >= completionHoldMs ||
+        _strongReturnSince != null &&
+            now - _strongReturnSince! >= _DepthEvidence.spanMs;
+    if (!confirmedReturn) {
       return (status: TrackingStatus.moving, rep: null, cue: liveCue);
     }
     final supportedBottom = _depth.supported;
-    final result = elapsed >= minRepMs && supportedBottom != null
+    final supportedMovement =
+        supportedBottom != null ||
+        _pushUpBend.supported != null &&
+            _pushUpBend.lowestRaw <= profile.motion;
+    if (line != null && line < FormProfile.bodyLineDegrees) {
+      _alignmentUncertain = true;
+    }
+    final result = elapsed >= minRepMs && supportedMovement
         ? _classify(missingLine, supportedBottom)
         : null;
     if (missingLine) {
@@ -244,14 +327,7 @@ final class RepAnalyzer {
     double aspect,
     int now,
     int dt,
-    bool extended,
   ) {
-    if (extended) {
-      _previousLine = null;
-      _lineDriftMs = 0;
-      _possibleDriftMs = 0;
-      return null;
-    }
     final line = _line(joints, side, aspect);
     final previous = _previousLine;
     _previousLine = line;
@@ -279,13 +355,17 @@ final class RepAnalyzer {
     return _cue(Cue.bodyLine, now);
   }
 
-  RepResult _classify(bool missingLine, double supported) {
+  RepResult _classify(bool missingLine, double? supported) {
     final depthPass =
+        supported != null &&
         supported <= profile.depth - FormProfile.depthMarginDegrees;
     final uncertainCapture =
+        supported == null ||
         !depthPass &&
-        (_depth.gap ||
-            supported - _depth.lowestRaw > 2 * FormProfile.depthMarginDegrees);
+            (_depth.gap ||
+                _shortenedAtBottom ||
+                supported - _depth.lowestRaw >
+                    2 * FormProfile.depthMarginDegrees);
     final angle = uncertainCapture ? null : supported.round();
     if (exercise == Exercise.pushUp &&
         (missingLine || _activeMs <= 0 || _lineEvidenceMs / _activeMs < 0.75)) {
@@ -318,9 +398,12 @@ final class RepAnalyzer {
   void _clearMovement() {
     _startedAt = null;
     _returnSince = null;
+    _strongReturnSince = null;
     _invalidEndSince = null;
     _maxDrop = 0;
     _depth.clear();
+    _pushUpBend.clear();
+    _shortenedAtBottom = false;
     _lineEvidenceMs = 0;
     _lineDriftMs = 0;
     _possibleDriftMs = 0;
@@ -328,6 +411,46 @@ final class RepAnalyzer {
     _previousLine = null;
     _alignmentFault = false;
     _alignmentUncertain = false;
+    _startAlignmentFault = false;
+    _correctedSetupSince = null;
+  }
+
+  _StartPose? _confirmedPlankStart(
+    _SideView view,
+    Joint body,
+    Joint support,
+    Joint knee,
+    int now,
+    int dt,
+    double aspect,
+  ) {
+    if (view.plankLine == null ||
+        view.angle < 165 ||
+        view.confidence < .85 ||
+        !knee.visible ||
+        knee.visibility < .85) {
+      _strongPlank = null;
+      return null;
+    }
+    final previous = _strongPlank;
+    if (previous == null ||
+        dt > 120 ||
+        (body.y - previous.pose.bodyY).abs() > .13 * previous.pose.length ||
+        _distance(previous.pose.support, support, aspect) >
+            .06 * previous.pose.length) {
+      _strongPlank = (
+        since: now,
+        pose: (
+          bodyY: body.y,
+          support: support,
+          length: view.length,
+          highestAngle: view.angle,
+        ),
+      );
+      return null;
+    }
+    // At least three high-confidence frames with a visibly extended leg and supported hand.
+    return now - previous.since >= 160 ? previous.pose : null;
   }
 
   Cue? _cue(Cue value, int now) {
@@ -391,18 +514,27 @@ final class RepAnalyzer {
     final supportConfidence = exercise == Exercise.squat
         ? joints[11 + side].visibility
         : math.min(joints[23 + side].visibility, joints[27 + side].visibility);
+    final overSupport =
+        angle >= profile.top && _hasSupportBelow(proximal, distal, length);
+    final plankLine = exercise == Exercise.pushUp && overSupport
+        ? _plankTopLine(joints, side, aspect)
+        : null;
     return (
       side: side,
       angle: angle,
       length: length,
+      plankLine: plankLine,
       confidence: math.min(
         math.min(proximal.visibility, middle.visibility),
         math.min(distal.visibility, supportConfidence),
       ),
       atTop:
-          angle >= profile.top &&
-          _hasSupportBelow(proximal, distal, length) &&
-          _validTop(joints, side, aspect),
+          overSupport &&
+          (exercise == Exercise.squat
+              ? _standing(joints, side)
+              : plankLine != null &&
+                    (plankLine >= FormProfile.bodyLineDegrees ||
+                        joints[25 + side].visible && plankLine >= 125)),
     );
   }
 
@@ -453,22 +585,29 @@ final class RepAnalyzer {
     return !farHip.visible || _distance(hip, farHip, aspect) <= torso * 0.58;
   }
 
-  bool _validTop(List<Joint> joints, int side, double aspect) {
+  double? _plankTopLine(List<Joint> joints, int side, double aspect) {
     final shoulder = joints[11 + side];
     final hip = joints[23 + side];
     final ankle = joints[27 + side];
-    if (![shoulder, hip, ankle].every((point) => point.visible)) return false;
-    if (exercise == Exercise.pushUp) {
-      final horizontal = (shoulder.x - ankle.x).abs() * aspect;
-      final knee = joints[25 + side];
-      final legAngle = knee.visible ? _angle(hip, knee, ankle, aspect) : null;
-      return horizontal > 0.15 &&
-          (shoulder.y - ankle.y).abs() < horizontal * 0.48 &&
-          (legAngle == null || legAngle >= 130) &&
-          (_line(joints, side, aspect) ?? 0) >= FormProfile.bodyLineDegrees;
+    if (!shoulder.visible || !hip.visible || !ankle.visible) return null;
+    final horizontal = (shoulder.x - ankle.x).abs() * aspect;
+    if (horizontal <= .15 || (shoulder.y - ankle.y).abs() >= horizontal * .48) {
+      return null;
     }
     final knee = joints[25 + side];
-    return shoulder.y < hip.y && hip.y < knee.y && knee.y < ankle.y;
+    if (knee.visible && (_angle(hip, knee, ankle, aspect) ?? 0) < 130) {
+      return null;
+    }
+    return _angle(shoulder, hip, ankle, aspect);
+  }
+
+  bool _standing(List<Joint> joints, int side) {
+    final shoulder = joints[11 + side], hip = joints[23 + side];
+    final knee = joints[25 + side], ankle = joints[27 + side];
+    return shoulder.visible &&
+        shoulder.y < hip.y &&
+        hip.y < knee.y &&
+        knee.y < ankle.y;
   }
 
   bool _hasSupportBelow(Joint body, Joint support, double length) =>

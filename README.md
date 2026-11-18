@@ -10,9 +10,11 @@ Project code is licensed under [Apache-2.0](LICENSE). Third-party notices apply 
 
 ## Test the Android app
 
-Use an ARM64 phone running Android 9 or later. Open the APK to update an earlier signed FormCheck build and keep your workout history. [Download the signed FormCheck 0.1.5 APK](https://github.com/localtradings/formcheck/releases/download/v0.1.5/FormCheck-0.1.5-android-arm64.apk)
+Use an ARM64 phone running Android 9 or later. Open the APK to update an earlier signed FormCheck build and keep your workout history. [Download the signed FormCheck 0.1.6 APK](https://github.com/localtradings/formcheck/releases/download/v0.1.6/FormCheck-0.1.6-android-arm64.apk)
 
 Choose an exercise on the Camera tab to see two drawings showing where to put the phone and what its camera should see.
+
+<img src="docs/images/squat-camera-setup.png" width="280" alt="Squat setup on Android. The phone is at standing hip height, 90 degrees to the direction the person faces."> <img src="docs/images/push-up-camera-setup.png" width="280" alt="Push-up setup on Android. The phone is low and beside the middle of the torso, 90 degrees to the mat.">
 
 | Exercise | Where to put the phone | What FormCheck checks |
 | --- | --- | --- |
@@ -21,7 +23,7 @@ Choose an exercise on the Camera tab to see two drawings showing where to put th
 
 For either exercise, aim for 0° lens tilt. The live camera distinguishes the estimated side angle, the phone’s tilt and the bending joint’s angle. If a number is unavailable, follow the setup drawing. With a clear view, hold the start position and tap **Start set**. After the set, browse individual reps to see the measured bottom angle when available and the cue associated with that rep.
 
-For a quick check, finish one rep from the side. Move the phone to face you halfway through the next rep, then return it to your side. The completed rep should stay in the set. Wait for **Ready for the next rep** before trying again. Repeat with the other exercise. [Release notes and checksum](https://github.com/localtradings/formcheck/releases/tag/v0.1.5)
+For a quick check, finish one rep from the side. Move the phone to face you halfway through the next rep, then return it to your side. The completed rep should stay in the set. Wait for **Ready for the next rep** before trying again. Repeat with the other exercise. In a push-up setup, the camera can also cue visible hip misalignment before you start the set. [Release notes and checksum](https://github.com/localtradings/formcheck/releases/tag/v0.1.6)
 
 ## Build from source
 

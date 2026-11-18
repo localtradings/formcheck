@@ -348,6 +348,137 @@ void main() {
     expect(replay.results.single.cue, Cue.bodyLine);
   });
 
+  test(
+    'a supported plank with moderate hip drift can count a corrected push-up',
+    () {
+      final replay = Replay(Exercise.pushUp);
+      replay.show(replay.plank(174, hipOffset: .16), 10);
+      expect(replay.status, TrackingStatus.ready);
+      replay.show(replay.plank(90, hipOffset: .16), 9);
+      replay.show(replay.plank(174, hipOffset: .16), 9);
+      expect(replay.results.single.outcome, RepOutcome.needsCorrection);
+      expect(replay.results.single.cue, Cue.bodyLine);
+    },
+  );
+
+  test('established setup alignment survives a gradual departure and clears after a settled correction', () {
+    for (final corrected in [false, true]) {
+      final replay = Replay(Exercise.pushUp, frameMs: 75);
+      final high = replay.plank(175, hipOffset: .16);
+      replay.show(high, 3);
+      expect(replay.analyzer.setupCue, isNull);
+      replay.show(high, 6);
+      expect(replay.analyzer.setupCue, Cue.bodyLine);
+      if (corrected) replay.show(replay.plank(175), 6);
+      final almost = replay.plank(147);
+      replay.show(
+        replay.shift(almost, dy: high[11].y - almost[11].y + .001),
+        1,
+      );
+      expect(replay.analyzer.setupCue, isNull);
+      replay.show(replay.plank(88), 9);
+      replay.show(replay.plank(175), 9);
+      expect(
+        replay.results.single.outcome,
+        corrected ? RepOutcome.passed : RepOutcome.needsCorrection,
+      );
+      expect(replay.results.single.cue, corrected ? null : Cue.bodyLine);
+    }
+  });
+
+  test('a sustained severe setup deviation can offer a cue while folded or missing legs cannot', () {
+    final replay = Replay(Exercise.pushUp);
+    final severe = replay.plank(174, hipOffset: .31);
+    replay.show(severe, 9);
+    expect(replay.status, TrackingStatus.getReady);
+    expect(replay.analyzer.setupCue, Cue.bodyLine);
+    replay.noPose();
+    expect(replay.analyzer.setupCue, isNull);
+    final folded = List.of(severe)
+      ..[25] = Joint(severe[23].x, severe[23].y + .2, .98);
+    replay.show(folded, 9);
+    expect(replay.status, TrackingStatus.getReady);
+    expect(replay.analyzer.setupCue, isNull);
+    final hidden = List.of(severe)..[25] = const Joint(0, 0, 0);
+    replay.show(hidden, 9);
+    expect(replay.status, TrackingStatus.getReady);
+    expect(replay.analyzer.setupCue, isNull);
+    replay.show(severe, 9);
+    replay.analyzer.reset();
+    expect(replay.analyzer.setupCue, isNull);
+  });
+
+  test('quick plank acquisition requires three supported, well-observed top frames', () {
+    for (final condition in [
+      'stable',
+      'missing knee',
+      'wrist moving',
+      'wide gap',
+    ]) {
+      final replay = Replay(Exercise.pushUp, frameMs: 83);
+      for (var i = 0; i < 3; i++) {
+        final top = replay.plank(175);
+        if (condition == 'missing knee') top[25] = const Joint(0, 0, 0);
+        if (condition == 'wide gap') replay.time += 62;
+        if (condition == 'wrist moving') {
+          top[15] = Joint(top[15].x + .043 * i, top[15].y, .98);
+        }
+        replay.show(top, 1);
+        if (i == 0) expect(replay.status, TrackingStatus.getReady);
+      }
+      expect(
+        replay.status,
+        condition == 'stable' ? TrackingStatus.ready : TrackingStatus.getReady,
+      );
+    }
+  });
+
+  test('a sharply shortened projected arm can count a cycle without reporting a bottom angle', () {
+    final replay = Replay(Exercise.pushUp);
+    replay.show(replay.plank(175), 8);
+    final bottom = replay.plank(88);
+    final wrist = bottom[15];
+    for (final index in [11, 13]) {
+      final joint = bottom[index];
+      bottom[index] = Joint(
+        wrist.x + (joint.x - wrist.x) * .48,
+        wrist.y + (joint.y - wrist.y) * .48,
+        .98,
+      );
+    }
+    final shoulder = bottom[11], ankle = bottom[27];
+    bottom[23] = Joint(
+      (shoulder.x + ankle.x) / 2,
+      (shoulder.y + ankle.y) / 2,
+      .98,
+    );
+    bottom[25] = Joint(
+      (bottom[23].x + ankle.x) / 2,
+      (bottom[23].y + ankle.y) / 2,
+      .98,
+    );
+    replay.show(bottom, 8);
+    replay.show(replay.plank(175), 8);
+    expect(replay.results.single.outcome, RepOutcome.unassessed);
+    expect(replay.results.single.bottomAngleDegrees, isNull);
+    expect(replay.results.single.cue, Cue.depthUnclear);
+  });
+
+  test('a complete fast push-up can have enough movement evidence but an uncertain bottom', () {
+    final replay = Replay(Exercise.pushUp, frameMs: 83);
+    replay.hold(175, 9);
+    for (final angle in [148.0, 139.0, 131.0, 91.0, 128.0, 150.0, 169.0]) {
+      replay.hold(angle, 1);
+    }
+    replay.hold(175, 6);
+    expect(replay.results.single.outcome, RepOutcome.unassessed);
+    expect(replay.results.single.cue, Cue.depthUnclear);
+    expect(replay.results.single.bottomAngleDegrees, isNull);
+    replay.hold(91, 1);
+    replay.hold(175, 8);
+    expect(replay.results, hasLength(1));
+  });
+
   test('a visibly folded leg cannot arm a standard push-up from a straight hip line', () {
     final replay = Replay(Exercise.pushUp);
     final top = replay._pose(175);
@@ -578,6 +709,20 @@ class Replay {
       joints[index + 1] = Joint(point.x + .01, point.y, right);
     }
     return joints;
+  }
+
+  List<Joint> plank(double elbow, {double hipOffset = 0}) {
+    final pose = _pose(elbow);
+    final shoulder = pose[11], ankle = pose[27];
+    final dx = ankle.x - shoulder.x, dy = ankle.y - shoulder.y;
+    final hip = Joint(
+      (shoulder.x + ankle.x) / 2 - dy * hipOffset,
+      (shoulder.y + ankle.y) / 2 + dx * hipOffset,
+      .98,
+    );
+    pose[23] = hip;
+    pose[25] = Joint((hip.x + ankle.x) / 2, (hip.y + ankle.y) / 2, .98);
+    return pose;
   }
 
   void show(List<Joint> joints, int frames) {

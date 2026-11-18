@@ -8,6 +8,45 @@ import 'package:formcheck/domain/workout.dart';
 
 void main() {
   test(
+    'setup cues use the visible plank and clear on tilt, loss or correction',
+    () {
+      final session = ExerciseAssessment(Exercise.pushUp);
+      List<Joint> plank(double hipY) {
+        final joints = List.filled(33, const Joint(0, 0, 0));
+        joints[11] = const Joint(.72, .40, .99);
+        joints[13] = const Joint(.72, .51, .99);
+        joints[15] = const Joint(.72, .63, .99);
+        joints[23] = Joint(.45, hipY, .99);
+        joints[25] = Joint(.315, (hipY + .48) / 2, .99);
+        joints[27] = const Joint(.18, .48, .99);
+        return joints;
+      }
+
+      var now = 0;
+      void hold(
+        List<List<Joint>> people, {
+        PhoneLevel? level,
+        int frames = 12,
+      }) {
+        for (var i = 0; i < frames; i++) {
+          session.accept(PoseSample(now += 80, 1, people), const [], level);
+        }
+      }
+
+      hold([plank(.35)]);
+      expect(session.setupCue, Cue.bodyLine);
+      hold([plank(.35)], level: const PhoneLevel(30, tilted: true), frames: 1);
+      expect(session.setupCue, isNull);
+      hold([plank(.35)]);
+      expect(session.setupCue, Cue.bodyLine);
+      hold([], frames: 1);
+      expect(session.setupCue, isNull);
+      hold([plank(.44)]);
+      expect(session.setupCue, isNull);
+    },
+  );
+
+  test(
     'the lens level works in both orientations and expires stale readings',
     () {
       final sensor = PhoneLevelFilter();
