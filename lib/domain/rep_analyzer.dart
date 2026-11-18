@@ -8,7 +8,12 @@ final class Joint {
   final double y;
   final double visibility;
   bool get visible =>
-      visibility >= 0.65 && x >= 0.02 && x <= 0.98 && y >= 0.02 && y <= 0.98;
+      visibility.isFinite &&
+      visibility >= 0.65 &&
+      x >= 0.02 &&
+      x <= 0.98 &&
+      y >= 0.02 &&
+      y <= 0.98;
 }
 
 final class PoseSample {
@@ -19,11 +24,12 @@ final class PoseSample {
 }
 
 typedef Analysis = ({TrackingStatus status, RepResult? rep, Cue? cue});
+typedef _SideView = ({int side, double angle, double confidence, bool atTop});
 
 final class FormProfile {
   const FormProfile._(this.id, this.top, this.motion, this.depth);
-  static const squat = FormProfile._('side-squat-v3', 153, 128, 105);
-  static const pushUp = FormProfile._('side-push-up-v3', 151, 127, 100);
+  static const squat = FormProfile._('side-squat-v4', 153, 128, 105);
+  static const pushUp = FormProfile._('side-push-up-v4', 151, 127, 100);
   static FormProfile forExercise(Exercise exercise) => switch (exercise) {
     Exercise.squat => squat,
     Exercise.pushUp => pushUp,
@@ -49,6 +55,7 @@ final class RepAnalyzer {
 
   int? _lastTime;
   int? _side;
+  ({Joint shoulder, Joint hip, Joint contact, double aspect})? _lastBody;
   int? _topSince;
   int? _startedAt;
   int? _returnSince;
@@ -62,7 +69,12 @@ final class RepAnalyzer {
 
   void reset() {
     _lastTime = null;
+    _clearTracking();
+  }
+
+  void _clearTracking() {
     _side = null;
+    _lastBody = null;
     _topSince = null;
     _filteredAngle = null;
     _armed = false;
@@ -85,32 +97,22 @@ final class RepAnalyzer {
       return _lost();
     }
     final joints = sample.people.single;
-    final side = _side ?? _selectSide(joints);
-    if (side == null ||
-        !_primaryJoints(side).every((index) => joints[index].visible) ||
-        !_sideOn(joints, side, sample.aspect)) {
-      return _lost();
-    }
-
-    final ids = _primaryJoints(side);
-    final angle = _angle(
-      joints[ids[0]],
-      joints[ids[1]],
-      joints[ids[2]],
-      sample.aspect,
-    );
-    if (angle == null) return _lost();
+    final view = _selectView(joints, sample.aspect);
+    if (view == null) return _lost();
+    final side = view.side;
+    if (_side != null && side != _side) _clearTracking();
+    if (_bodyJumped(joints, side, sample.aspect, dt)) return _lost();
     _side = side;
     final oldAngle = _filteredAngle;
     // Use a time-based filter so behavior remains comparable across frame rates.
     final alpha = 1 - math.exp(-dt / 75);
     final filtered = oldAngle == null
-        ? angle
-        : oldAngle + alpha * (angle - oldAngle);
+        ? view.angle
+        : oldAngle + alpha * (view.angle - oldAngle);
     _filteredAngle = filtered;
 
     if (!_armed) {
-      if (filtered >= profile.top && _validTop(joints, side, sample.aspect)) {
+      if (filtered >= profile.top && view.atTop) {
         _topSince ??= now;
         _armed = now - _topSince! >= readyMs;
       } else {
@@ -180,7 +182,7 @@ final class RepAnalyzer {
   }
 
   Analysis _lost() {
-    reset();
+    _clearTracking();
     return (status: TrackingStatus.reposition, rep: null, cue: null);
   }
 
@@ -200,22 +202,77 @@ final class RepAnalyzer {
     return value;
   }
 
-  List<int> _primaryJoints(int side) => exercise == Exercise.squat
-      ? [23 + side, 25 + side, 27 + side]
-      : [11 + side, 13 + side, 15 + side];
-
-  int? _selectSide(List<Joint> joints) {
-    double score(int side) {
-      final values = _primaryJoints(side).map((i) => joints[i]);
-      return values.every((j) => j.visible)
-          ? values.map((j) => j.visibility).reduce(math.min)
-          : -1;
+  _SideView? _selectView(List<Joint> joints, double aspect) {
+    final first = _side ?? 0;
+    final current = _readSide(joints, first, aspect);
+    if (_startedAt != null ||
+        (_armed && current != null && current.angle < profile.top)) {
+      return current;
     }
+    final other = _readSide(joints, 1 - first, aspect);
+    if (current == null) return other;
+    if (other == null) return current;
+    if (current.atTop != other.atTop) return current.atTop ? current : other;
+    final switchMargin = _side == null ? 0.0 : .10;
+    return other.confidence > current.confidence + switchMargin
+        ? other
+        : current;
+  }
 
-    final left = score(0);
-    final right = score(1);
-    if (left < 0 && right < 0) return null;
-    return left >= right ? 0 : 1;
+  _SideView? _readSide(List<Joint> joints, int side, double aspect) {
+    final first = (exercise == Exercise.squat ? 23 : 11) + side;
+    final proximal = joints[first];
+    final middle = joints[first + 2];
+    final distal = joints[first + 4];
+    if (!proximal.visible ||
+        !middle.visible ||
+        !distal.visible ||
+        !_sideOn(joints, side, aspect)) {
+      return null;
+    }
+    final angle = _angle(proximal, middle, distal, aspect);
+    if (angle == null) return null;
+    final supportConfidence = exercise == Exercise.squat
+        ? joints[11 + side].visibility
+        : math.min(joints[23 + side].visibility, joints[27 + side].visibility);
+    return (
+      side: side,
+      angle: angle,
+      confidence: math.min(
+        math.min(proximal.visibility, middle.visibility),
+        math.min(distal.visibility, supportConfidence),
+      ),
+      atTop: angle >= profile.top && _validTop(joints, side, aspect),
+    );
+  }
+
+  bool _bodyJumped(List<Joint> joints, int side, double aspect, int dt) {
+    final previous = _lastBody;
+    final shoulder = joints[11 + side];
+    final hip = joints[23 + side];
+    final contact = joints[(exercise == Exercise.squat ? 27 : 15) + side];
+    _lastBody = (
+      shoulder: shoulder,
+      hip: hip,
+      contact: contact,
+      aspect: aspect,
+    );
+    if (previous == null) return false;
+    if (aspect != previous.aspect) return true;
+    final dx = (contact.x - previous.contact.x) * aspect;
+    final dy = contact.y - previous.contact.y;
+    final travel = math.sqrt(dx * dx + dy * dy);
+    final jumpDistance = math.min(1.0, aspect) * (.18 + .35 * dt / 1000);
+    if (travel <= jumpDistance) return false;
+
+    double alongTravel(Joint current, Joint last) =>
+        ((current.x - last.x) * aspect * dx + (current.y - last.y) * dy) /
+        travel;
+    final shoulderShift = alongTravel(shoulder, previous.shoulder);
+    final torsoShift = hip.visible && previous.hip.visible
+        ? (shoulderShift + alongTravel(hip, previous.hip)) / 2
+        : shoulderShift;
+    return torsoShift > jumpDistance;
   }
 
   bool _sideOn(List<Joint> joints, int side, double aspect) {
@@ -223,7 +280,7 @@ final class RepAnalyzer {
     final hip = joints[23 + side];
     if (!shoulder.visible || !hip.visible) {
       // A missing push-up hip reduces alignment coverage independently of elbow tracking.
-      return exercise == Exercise.pushUp && _armed;
+      return exercise == Exercise.pushUp && _armed && side == _side;
     }
     final farShoulder = joints[12 - side];
     final farHip = joints[24 - side];

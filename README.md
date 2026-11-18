@@ -10,9 +10,11 @@ Project code is licensed under [Apache-2.0](LICENSE). Third-party notices apply 
 
 ## Test the Android app
 
-[Download the signed FormCheck 0.1.3 APK](https://github.com/localtradings/formcheck/releases/download/v0.1.3/FormCheck-0.1.3-android-arm64.apk) on an ARM64 phone running Android 9 or later. Open the downloaded APK to install it. It updates the earlier signed build while preserving local history.
+[Download the signed FormCheck 0.1.4 APK](https://github.com/localtradings/formcheck/releases/download/v0.1.4/FormCheck-0.1.4-android-arm64.apk) on an ARM64 phone running Android 9 or later. Open it to update an earlier signed build and keep your workout history.
 
-Version 0.1.3 adds Google's Full pose model, the complete supported skeleton and display stabilization. Solid segments show confident observations; dashed segments show brief uncertainty. The camera image and skeleton still share the analyzed frame and transform. See the [release notes and test steps](https://github.com/localtradings/formcheck/releases/tag/v0.1.3). Physical-phone alignment, performance and rule calibration remain device acceptance checks.
+Set the phone at your side. If you move too close or leave the frame, FormCheck tries to widen the camera view. If your camera has reached its limit, follow the on-screen direction to bring the missing joints into view. During setup it can zoom in on a small, centered person. During a tracked rep it keeps the view steady. Your completed reps stay in the set while the camera finds you again.
+
+For a quick check, finish one squat, step out halfway through the next one, then return and stand still. The first squat should stay counted. The interrupted one should add nothing. After the camera is ready, do another full squat. [Release notes and Android download](https://github.com/localtradings/formcheck/releases/tag/v0.1.4)
 
 ## Build from source
 

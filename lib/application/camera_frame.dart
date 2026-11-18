@@ -5,12 +5,12 @@ import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:mediapipe_vision/mediapipe_vision.dart';
 
-/// Copies camera pixels without rotating or resizing the sensor image.
-VisionImage visionImageFromCamera(CameraImage image) {
+/// Copies sensor pixels, or prepares tightly packed upright pixels for inference.
+VisionImage visionImageFromCamera(CameraImage image, {int? rotation}) {
   if (image.format.group == ImageFormatGroup.bgra8888 &&
       image.planes.length == 1) {
     final plane = image.planes.single;
-    return VisionImage.fromPixels(
+    final source = VisionImage.fromPixels(
       pixels: plane.bytes,
       width: image.width,
       height: image.height,
@@ -19,10 +19,12 @@ VisionImage visionImageFromCamera(CameraImage image) {
           ? VisionPixelFormat.rgba
           : VisionPixelFormat.bgra,
     );
+    return rotation == null ? source : orientPoseImage(source, rotation);
   }
   if (image.format.group == ImageFormatGroup.yuv420 &&
       image.planes.length == 3) {
     final planes = image.planes;
+    final sideways = rotation == 90 || rotation == 270;
     return VisionImage.fromPixels(
       pixels: yuv420ToRgba(
         width: image.width,
@@ -36,9 +38,10 @@ VisionImage visionImageFromCamera(CameraImage image) {
         yPixelStride: planes[0].bytesPerPixel ?? 1,
         uvPixelStride: planes[1].bytesPerPixel ?? 1,
         vPixelStride: planes[2].bytesPerPixel ?? 1,
+        rotation: rotation ?? 0,
       ),
-      width: image.width,
-      height: image.height,
+      width: sideways ? image.height : image.width,
+      height: sideways ? image.width : image.height,
       format: VisionPixelFormat.rgba,
     );
   }
@@ -59,6 +62,7 @@ Uint8List yuv420ToRgba({
   int yPixelStride = 1,
   int uvPixelStride = 1,
   int vPixelStride = 1,
+  int rotation = 0,
 }) {
   void validate(Uint8List plane, int cols, int rows, int row, int pixel) {
     if (cols <= 0 ||
@@ -73,20 +77,35 @@ Uint8List yuv420ToRgba({
   validate(y, width, height, yRowStride, yPixelStride);
   validate(u, (width + 1) ~/ 2, (height + 1) ~/ 2, uvRowStride, uvPixelStride);
   validate(v, (width + 1) ~/ 2, (height + 1) ~/ 2, vRowStride, vPixelStride);
+  final (firstPixel, rowStep, columnStep) = switch (rotation) {
+    0 => (0, width, 1),
+    90 => (height - 1, -1, height),
+    180 => (width * height - 1, -width, -1),
+    270 => ((width - 1) * height, 1, -height),
+    _ => throw ArgumentError.value(
+      rotation,
+      'rotation',
+      'Expected a quarter turn',
+    ),
+  };
   final rgba = Uint8List(width * height * 4);
-  // dart2js bitwise shifts can treat negative intermediates as unsigned.
-  // Floor division matches the VM's arithmetic right shift on every platform.
-  int byte(int numerator) => (numerator / 256).floor().clamp(0, 255);
+  final columnBytes = columnStep * 4;
+  int byte(int numerator) => numerator.clamp(0, 0xffff) >> 8;
   for (var row = 0; row < height; row++) {
+    final lumaStart = row * yRowStride;
+    final blueStart = (row ~/ 2) * uvRowStride;
+    final redStart = (row ~/ 2) * vRowStride;
+    var output = (firstPixel + row * rowStep) * 4;
     for (var col = 0; col < width; col++) {
-      final luma = y[row * yRowStride + col * yPixelStride] - 16;
-      final cb = u[(row ~/ 2) * uvRowStride + (col ~/ 2) * uvPixelStride] - 128;
-      final cr = v[(row ~/ 2) * vRowStride + (col ~/ 2) * vPixelStride] - 128;
-      final i = (row * width + col) * 4;
-      rgba[i] = byte(298 * luma + 409 * cr + 128);
-      rgba[i + 1] = byte(298 * luma - 100 * cb - 208 * cr + 128);
-      rgba[i + 2] = byte(298 * luma + 516 * cb + 128);
-      rgba[i + 3] = 255;
+      final luma = 298 * (y[lumaStart + col * yPixelStride] - 16) + 128;
+      final chromaColumn = col ~/ 2;
+      final cb = u[blueStart + chromaColumn * uvPixelStride] - 128;
+      final cr = v[redStart + chromaColumn * vPixelStride] - 128;
+      rgba[output] = byte(luma + 409 * cr);
+      rgba[output + 1] = byte(luma - 100 * cb - 208 * cr);
+      rgba[output + 2] = byte(luma + 516 * cb);
+      rgba[output + 3] = 255;
+      output += columnBytes;
     }
   }
   return rgba;
@@ -132,4 +151,4 @@ VisionImage orientPoseImage(VisionImage image, int rotation) {
 
 /// Runs on a worker isolate. Camera planes contain owned Dart byte buffers.
 VisionImage preparePoseImage((CameraImage, int) request) =>
-    orientPoseImage(visionImageFromCamera(request.$1), request.$2);
+    visionImageFromCamera(request.$1, rotation: request.$2);

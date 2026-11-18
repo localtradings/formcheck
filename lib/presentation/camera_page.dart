@@ -318,8 +318,8 @@ class _Stage extends StatelessWidget {
     final status = switch (capture.status) {
       TrackingStatus.reposition =>
         exercise == Exercise.squat
-            ? 'Show your hips, knees and ankles from the side'
-            : 'Show your shoulders, hips and feet from the side',
+            ? 'Turn sideways so one hip, knee and ankle are clearly visible.'
+            : 'Turn sideways so one shoulder, elbow and wrist are clearly visible.',
       TrackingStatus.getReady =>
         exercise == Exercise.squat
             ? 'Stand tall to get ready'
@@ -407,8 +407,8 @@ class _Stage extends StatelessWidget {
                   child: Text(
                     capture.error ??
                         (capture.busy
-                            ? 'Starting camera…'
-                            : cue?.message ?? status),
+                            ? capture.openingMessage
+                            : capture.framingMessage ?? cue?.message ?? status),
                     style: TextStyle(
                       color: cue != null ? amber : null,
                       fontWeight: FontWeight.w700,

@@ -1,6 +1,8 @@
 package com.localtradings.formcheck
 
 import android.content.Intent
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.net.Uri
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
@@ -23,12 +25,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 class MainActivity : FlutterActivity() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var tts: TextToSpeech? = null
     private var speechReady = false
+    private var pendingSpeech: String? = null
     private var reviewInFlight = false
 
     override fun configureFlutterEngine(engine: FlutterEngine) {
@@ -56,6 +60,13 @@ class MainActivity : FlutterActivity() {
         MethodChannel(engine.dartExecutor.binaryMessenger, "formcheck/device")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "cameraViewWidths" -> {
+                        val names = (call.arguments as? List<*>)?.filterIsInstance<String>().orEmpty()
+                        scope.launch {
+                            val widths = withContext(Dispatchers.IO) { cameraViewWidths(names) }
+                            result.success(widths)
+                        }
+                    }
                     "settings" -> {
                         startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                             Uri.fromParts("package", packageName, null)))
@@ -66,12 +77,27 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                     "stopVoice" -> {
-                        tts?.stop()
+                        stopVoice()
                         result.success(null)
                     }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun cameraViewWidths(names: List<String>): Map<String, Double> {
+        val manager = getSystemService(CameraManager::class.java) ?: return emptyMap()
+        return names.distinct().take(16).mapNotNull { name ->
+            try {
+                val info = manager.getCameraCharacteristics(name)
+                val sensor = info.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
+                val focal = info.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.singleOrNull()
+                if (sensor == null || focal == null || sensor.width <= 0 || focal <= 0) null
+                else name to sensor.width.toDouble() / focal
+            } catch (_: Exception) {
+                null
+            }
+        }.toMap()
     }
 
     @OptIn(PublicPreviewAPI::class)
@@ -112,6 +138,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun speak(message: String) {
+        pendingSpeech = message
         val current = tts
         if (current == null) {
             tts = TextToSpeech(this) { status ->
@@ -121,25 +148,36 @@ class MainActivity : FlutterActivity() {
                         it.locale.language == "en" && !it.isNetworkConnectionRequired &&
                             it.features?.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) != true
                     }
-                    if (voice != null) {
-                        engine.voice = voice
+                    if (voice != null && engine.setVoice(voice) == TextToSpeech.SUCCESS) {
                         speechReady = true
+                        pendingSpeech?.let { engine.speak(it, TextToSpeech.QUEUE_FLUSH, null, "formcheck-cue") }
                     }
                 }
+                pendingSpeech = null
             }
             return
         }
-        if (speechReady) current.speak(message, TextToSpeech.QUEUE_FLUSH, null, "formcheck-cue")
+        if (speechReady) {
+            current.speak(message, TextToSpeech.QUEUE_FLUSH, null, "formcheck-cue")
+            pendingSpeech = null
+        }
+    }
+
+    private fun stopVoice() {
+        pendingSpeech = null
+        tts?.stop()
     }
 
     override fun onStop() {
-        tts?.stop()
+        stopVoice()
         super.onStop()
     }
 
     override fun onDestroy() {
         scope.cancel()
+        stopVoice()
         tts?.shutdown()
+        tts = null
         super.onDestroy()
     }
 }
